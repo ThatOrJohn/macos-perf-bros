@@ -309,7 +309,7 @@ Names: show **at least 8 characters** in hi-res (5×7 font, 6 px advance). Six c
 
 ## R9. Idle frame-rate drop
 
-**Status:** mostly done in `claude/render-overhead`. The app now runs at 30 fps while the player walks or the zoom transition runs, and at 5 fps otherwise (`Game.busy()`, `ACTIVE_FPS`/`IDLE_FPS` in `src/main.ts`). Half-block rendering updates only changed cells in an offscreen buffer, Kitty skips identical frames, and `Game` reuses its output buffers.
+**Status:** done. The app now runs at 30 fps while the player walks or the zoom transition runs, and at 5 fps otherwise (`Game.busy()`, `ACTIVE_FPS`/`IDLE_FPS` in `src/main.ts`). Half-block rendering updates only changed cells in an offscreen buffer, Kitty skips identical frames, and `Game` reuses its output buffers.
 
 Measured with `bun run demo` in the Claude terminal panel: process CPU over 60 s, as a percentage of one core.
 
@@ -318,10 +318,7 @@ Measured with `bun run demo` in the Claude terminal panel: process CPU over 60 s
 | blocks | 17.6% | 5.3% |
 | kitty | 18.9% | 5.9% |
 
-**Still open:** the ~3% budget isn't met. A bare OpenTUI app with nothing on screen costs about 1.0% fixed plus 0.26% per fps (1.6% at 2 fps, 3.7% at 10 fps), so 3% total means about 2 fps idle. The options need a maintainer call:
-- accept about 5% at 5 fps idle, or
-- idle at 2 fps, or
-- freeze ambient animation when idle and redraw only on 1 Hz data changes.
+**Budget:** the maintainer accepted ~5% at 5 fps idle (2026-11-23). The original 3% target would have needed about 2 fps idle, since a bare OpenTUI app costs about 1.0% fixed plus 0.26% per fps. AGENTS.md rule 7 and DESIGN.md now say 5%.
 
 ---
 
