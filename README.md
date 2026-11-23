@@ -8,14 +8,33 @@ A terminal system monitor for Apple Silicon Macs, presented as an original NES-s
 
 ```bash
 bun install
-bun start                 # live; asks for sudo once so powermetrics can run (the UI itself never runs as root)
-bun start -- --no-sudo    # live without sudo (no GPU/power/thermal/frequencies)
-bun run demo              # replay bundled recordings, no sudo needed
+bun link                  # installs the `perf-bros` command (run it from any directory)
+perf-bros                 # live; asks for sudo once so powermetrics can run (the UI itself never runs as root)
+perf-bros --no-sudo       # live without sudo (no GPU, power, thermal, network, disk or CPU frequency)
+perf-bros --demo          # replay a bundled recording, no sudo needed
+perf-bros --help          # all options
 ```
+
+From the repo, `bun start` and `bun run demo` do the same without linking.
 
 The best way to view it is Ghostty, Kitty or WezTerm, which get real pixel graphics (320×192). Other terminals get a half-block version. Needs at least 80×24.
 
 Keys: arrows or `hjkl` move · `⏎` enter · `Esc` back · `1`–`6` jump to a zone · `r` toggle renderer · `q` quit.
+
+### Skipping the sudo prompt (optional)
+
+The GPU, power, thermal, network and disk readings come from Apple's `powermetrics`, which needs root. By default perf-bros asks for your password at launch, and powermetrics runs as a child process while the UI stays unprivileged.
+
+To launch without a prompt, add a sudoers rule for **exactly** the powermetrics command perf-bros runs. `perf-bros --sudoers` prints that rule, and the install steps:
+
+```bash
+tmp=$(mktemp) && perf-bros --sudoers > "$tmp"
+sudo visudo -cf "$tmp" && sudo install -m 0440 -o root -g wheel "$tmp" /etc/sudoers.d/perf-bros; rm -f "$tmp"
+```
+
+`mktemp` makes a private file with an unpredictable name. Don't stage the rule at a fixed path like `/tmp/perf-bros.sudoers`: another local user could swap the file between the check and the install. The rule pins every argument. Don't loosen it to `/usr/bin/powermetrics` with arbitrary arguments: powermetrics can write files with `-o`, so that would let anything running as you write files as root. If a perf-bros update changes the powermetrics arguments, the rule stops matching and you'll get the password prompt again; re-run the steps above. To remove the rule: `sudo rm /etc/sudoers.d/perf-bros`.
+
+If powermetrics exits mid-session, perf-bros keeps running without it and retries after 2 s, 5 s, 15 s, then every 60 s. A retry can only succeed while sudo is still cached (about 5 minutes after the password prompt) or with the sudoers rule above.
 
 ## Docs
 

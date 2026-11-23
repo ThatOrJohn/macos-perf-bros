@@ -25,8 +25,9 @@ async function render(cols: number, rows: number, keys: string[]) {
 
 test("overworld renders HUD, half-block pixels and hint line at 80×24", async () => {
   const lines = await render(80, 24, []);
-  expect(lines[0]).toContain("PERF·BROS");
-  expect(lines[0]).toContain("CPU");
+  // The brand is the first field to drop when the HUD row is full.
+  expect(lines[0]).toMatch(/^(?: PERF·BROS │ )?CPU /);
+  expect(lines[0]).toContain("GPU");
   expect(lines[5]).toContain("▀");
   expect(lines[23]).toContain("CPU FORTRESS");
 });
@@ -34,13 +35,13 @@ test("overworld renders HUD, half-block pixels and hint line at 80×24", async (
 test("every zone renders without throwing", async () => {
   for (const k of ["1", "2", "3", "4", "5", "6"]) {
     const lines = await render(80, 24, [k]);
-    expect(lines[0]).toContain("PERF·BROS");
+    expect(lines[0]).toMatch(/CPU +\d+%/);
   }
 });
 
 test("scales 2× and centers in a large terminal", async () => {
   const lines = await render(170, 50, ["1"]);
-  const hudRow = lines.findIndex((l) => l.includes("PERF·BROS"));
+  const hudRow = lines.findIndex((l) => /CPU +\d+%/.test(l));
   expect(hudRow).toBe(1); // (50 - 48) / 2
   expect(lines.some((l) => l.includes("CPU FORTRESS"))).toBe(true);
 });
