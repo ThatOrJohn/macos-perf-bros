@@ -2,7 +2,7 @@
  * Process Plains (DESIGN.md §7.3). Top twelve by CPU stay in PID-keyed meadow
  * slots. RSS (<100 MB, <1 GB, or larger) scales the slime, CPU drives its hops,
  * and energy impact >100 lights a gold halo. The #1 process above 50% becomes a
- * boss. Its bar fills over 0–100% of one core and its label gives the full CPU
+ * boss (fixed size; its RSS stays in the labels). Its bar fills over 0–100% of one core and its label gives the full CPU
  * percentage. The board lists eight processes and sums wakeups per second
  * across the twelve displayed processes.
  */
@@ -17,31 +17,44 @@ import { BOSS, SLIMES, SLIME_BASES, W, X, drawHintHi, drawHudHi, drawMountains, 
 export const PROCESS_LIMIT_HI = 12;
 const SHADOW = { shadow: X.outline };
 
-function drawSlimeHi(cv: PixelCanvas, slime: Slime, departing: boolean): void {
-  const { proc, slot, paletteSeed, boss, presence } = slime;
+function slimePos(slime: Slime): { cx: number; foot: number } {
+  return { cx: 26 + (slime.slot % 4) * 49, foot: 61 + Math.floor(slime.slot / 4) * 45 };
+}
+
+/**
+ * Pass 1: sprite, halo and boss bar. The boss keeps a fixed size and a short
+ * hop so it and its bar stay within the 18 px gap below the label stack of
+ * the slot above (rows are 45 px apart, labels take up to 27 px).
+ */
+function drawSlimeHi(cv: PixelCanvas, slime: Slime): void {
+  const { paletteSeed, boss, presence } = slime;
   if (presence === 0) return;
-  const cx = 26 + (slot % 4) * 49;
-  const foot = 61 + Math.floor(slot / 4) * 45;
+  const { cx, foot } = slimePos(slime);
   const hop = slimeHop(slime);
   const x = cx + Math.round(4 * Math.sin(slime.phase * 2 * Math.PI));
   const [normal, squash] = SLIMES[Math.floor(paletteSeed * SLIMES.length)]!;
   const art = boss ? BOSS : hop < 0.08 ? squash : normal;
-  const scale = slime.size * presence;
+  const scale = (boss ? 1 : slime.size) * presence;
   const w = Math.max(1, Math.round(art.w * scale));
   const h = Math.max(1, Math.round(art.h * scale));
-  const y = foot - h - Math.round(hop * (boss ? 8 : 6));
+  const y = foot - h - Math.round(hop * (boss ? 2 : 6));
   if (slime.glow > 0.05) glow(cv, x, y + Math.floor(h / 2), Math.ceil(w / 2) + 5, P.accent, slime.glow * presence);
   outlined(cv, X.outline, (layer) => blitScaledSlime(layer, art, x - Math.floor(w / 2), y, w, h));
-  if (departing) return;
-
   if (boss) {
-    cv.rect(x - 13, y - 6, 27, 5, X.outline);
-    cv.rect(x - 12, y - 5, 25, 3, P.stoneDeep);
-    cv.rect(x - 12, y - 5, Math.round(25 * Math.min(1, slime.cpu / 100)), 3, P.lavaHi);
+    cv.rect(x - 13, y - 5, 27, 4, X.outline);
+    cv.rect(x - 12, y - 4, 25, 2, P.stoneDeep);
+    cv.rect(x - 12, y - 4, Math.round(25 * Math.min(1, slime.cpu / 100)), 2, P.lavaHi);
   }
+}
+
+/** Pass 2: labels, drawn after every sprite so no sprite or bar covers them. */
+function drawSlimeLabelsHi(cv: PixelCanvas, slime: Slime): void {
+  const { proc, boss } = slime;
+  if (slime.presence === 0) return;
+  const { cx, foot } = slimePos(slime);
   drawTextCentered(cv, cx, foot + 1, `${slime.rank} ${fmtPct(proc.cpuPct)}`, boss ? P.lavaHi : P.white, SHADOW);
   drawTextCentered(cv, cx, foot + 10, proc.rssB === undefined ? "-" : fmtBytes(proc.rssB), P.hudFg, SHADOW);
-  if (slime.glow > 0.05) drawTextCentered(cv, cx, foot + 19, `E${Math.round(proc.energyImpact)}`, P.accent, SHADOW);
+  if (slime.glow > 0.05) drawTextCentered(cv, cx, foot + 19, `E${Math.round(proc.energyImpact)}`, P.accent, { bg: X.outline });
 }
 
 function drawBoardHi(cv: PixelCanvas, ranked: Slime[]): void {
@@ -89,8 +102,9 @@ function drawMeadowHi(cv: PixelCanvas, t: number): void {
 export function drawProcessZoneHi(cv: PixelCanvas, ctx: DrawCtx, field: ProcessField): void {
   drawMeadowHi(cv, ctx.t);
   const { ranked, leaving } = field.update(ctx.snap.procs, ctx.dt);
-  for (const slime of leaving) drawSlimeHi(cv, slime, true);
-  for (const slime of ranked) drawSlimeHi(cv, slime, false);
+  for (const slime of leaving) drawSlimeHi(cv, slime);
+  for (const slime of ranked) drawSlimeHi(cv, slime);
+  for (const slime of ranked) drawSlimeLabelsHi(cv, slime);
   drawBoardHi(cv, ranked);
   drawTextCentered(cv, W / 2, 14, "PROCESS PLAINS", P.accent, SHADOW);
   drawHudHi(cv, ctx.snap);
