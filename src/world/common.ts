@@ -68,6 +68,7 @@ export function drawHud(f: Frame, snap: Snapshot): void {
   if (snap.power) fields.push([`PWR ${snap.power.packageW.toFixed(1)}W`, P.hudFg]);
   if (snap.thermal) fields.push([snap.thermal.toUpperCase(), thermalColor(snap.thermal)]);
   fields.push([snap.battery ? `♥ ${Math.round(snap.battery.pct)}%` : "AC", P.hudFg]);
+  if (!snap.privileged) fields.push(["NO SUDO", P.warn]);
   fields.push([`UP ${fmtUptime(snap.uptimeS)}`, P.dim]);
 
   // Fields drop off the right end when the row is full; separators only between drawn fields.
@@ -96,6 +97,30 @@ export const PLAYER = [
   sprite(["..y..", "..k..", ".TTT.", "TvevT", ".TTT.", "dTTTd", ".T.T.", ".d.d."], playerKey),
   sprite(["..y..", "..k..", ".TTT.", "TvevT", ".TTT.", "dTTTd", "T...T", "d...d"], playerKey),
 ];
+
+/** Padlock for locked (no-sudo) zones: gold body, metal shackle, ink keyhole. */
+export const PADLOCK = sprite([".m.", "aaa", "aka"], { m: P.metalLight, a: P.accent, k: P.ink });
+
+/**
+ * Centered panel for a zone scene whose data needs sudo. Panel spans
+ * canvas x 20–59, y 14–31 (text rows 8–16).
+ */
+export function drawLockedPanel(f: Frame): void {
+  const cv = f.canvas;
+  cv.rect(19, 13, 42, 20, P.ink);
+  cv.rect(20, 14, 40, 18, P.stoneDeep);
+  cv.hline(20, 59, 14, P.stoneDark);
+  // padlock (canvas y 16–23 = text rows 9–12), text below on rows 13–14
+  cv.rect(37, 16, 6, 1, P.metalLight);
+  cv.vline(37, 16, 18, P.metalLight);
+  cv.vline(42, 16, 18, P.metalLight);
+  cv.rect(36, 19, 8, 5, P.accent);
+  cv.hline(36, 43, 19, P.glow);
+  cv.vline(39, 20, 22, P.ink);
+  cv.vline(40, 20, 21, P.ink);
+  f.centered(40, 13, "NEEDS SUDO", P.accent, P.stoneDeep, true);
+  f.centered(40, 14, "restart without --no-sudo", P.dim, P.stoneDeep);
+}
 
 export const PUFF = [
   sprite(["ss", "ss"], { s: P.smoke }),

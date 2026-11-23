@@ -5,11 +5,11 @@
 import { mix, type PixelCanvas } from "../engine/canvas.ts";
 import { drawText, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
-import { bayer, bevel, bricks, disc, dither, glow, line, outlined } from "../engine/paint.ts";
+import { bayer, bevel, bricks, disc, dither, drawDimmed, glow, line, outlined } from "../engine/paint.ts";
 import { cpuTotalPct, fmtBytes, fmtPct, hash, pressureColor, type DrawCtx } from "../world/common.ts";
-import { ZONES, type OverworldState, type ZoneId } from "../world/overworld.ts";
+import { ZONES, zoneLocked, type OverworldState, type ZoneId } from "../world/overworld.ts";
 import {
-  BOSS, CART, FLAME, PINE, SLIMES, TREE, W, X,
+  BOSS, CART, FLAME, PADLOCK, PINE, SLIMES, TREE, W, X,
   drawGrassField, drawHintHi, drawHudHi, drawMountains, drawNightSky, drawRobot, drawSmokeHi,
 } from "./common.ts";
 
@@ -173,7 +173,9 @@ const BRICK_RED = { base: X.brickRed, light: X.brickRedLight, dark: X.brickRedDa
 function powerPlant(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
   const watts = ctx.sm.get("hi.pwr", ctx.snap.power?.packageW ?? 0, ctx.dt);
   const heat = Math.min(1, watts / 15);
-  drawSmokeHi(cv, dx + 27, dy - 62, 0.25 + heat * 0.75, ctx.t, 3);
+  // No power reading (no sudo): no smoke or chimney glow, since both encode watts.
+  const live = !!ctx.snap.power;
+  if (live) drawSmokeHi(cv, dx + 27, dy - 62, 0.25 + heat * 0.75, ctx.t, 3);
   outlined(cv, X.outline, (l) => {
     bricks(l, dx - 24, dy - 26, 44, 26, BRICK_RED, 8, 4);
     // sawtooth roof
@@ -210,7 +212,7 @@ function powerPlant(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
   const bolt = [[2, 0], [1, 1], [0, 2], [1, 2], [2, 2], [1, 3], [0, 4]];
   for (const [bx, by] of bolt) cv.set(dx + 7 + bx!, dy - 9 + by!, P.accent);
   // chimney mouth glow
-  glow(cv, dx + 27, dy - 60, 5 + Math.round(heat * 4), mix(P.ember, P.lavaHi, heat), 0.5 + heat * 0.4);
+  if (live) glow(cv, dx + 27, dy - 60, 5 + Math.round(heat * 4), mix(P.ember, P.lavaHi, heat), 0.5 + heat * 0.4);
 }
 
 function lavaPit(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
@@ -348,15 +350,26 @@ const TILES: Record<ZoneId, (cv: PixelCanvas, x: number, y: number, ctx: DrawCtx
   cpu: castle, mem: waterTower, power: powerPlant, net: cloudIsland, proc: meadow, disk: mine,
 };
 
+/**
+ * Locked tiles (data needs sudo): bounding box to dim and where the padlock
+ * hangs, relative to the zone's door point.
+ */
+const LOCK_BOX: Partial<Record<ZoneId, { x: number; y: number; w: number; h: number; lx: number; ly: number }>> = {
+  power: { x: -26, y: -64, w: 61, h: 66, lx: -2, ly: -24 },
+  net: { x: -42, y: -34, w: 89, h: 52, lx: -28, ly: -2 }, // left lobe: the water tower covers the middle
+  disk: { x: -72, y: -48, w: 120, h: 50, lx: 0, ly: -18 },
+};
+
+/** Locked zones read `PWR —`; the em dash says "no reading", not zero. */
 function labelOf(id: ZoneId, ctx: DrawCtx): string {
   const s = ctx.snap;
   switch (id) {
     case "cpu": return `CPU ${fmtPct(cpuTotalPct(s))}`;
     case "mem": return s.memory ? `MEM ${fmtPct((s.memory.usedB / s.memory.totalB) * 100)}` : "MEM";
-    case "power": return s.power ? `PWR ${s.power.packageW.toFixed(1)}W` : "PWR";
+    case "power": return s.power ? `PWR ${s.power.packageW.toFixed(1)}W` : "PWR —";
     case "proc": return `PROCS ${s.procs.length}`;
-    case "disk": return s.disk ? `DISK ${fmtBytes(s.disk.readBps + s.disk.writeBps)}/S` : "DISK";
-    case "net": return s.net ? `NET ↓${fmtBytes(s.net.rxBps)} ↑${fmtBytes(s.net.txBps)}` : "NET";
+    case "disk": return s.disk ? `DISK ${fmtBytes(s.disk.readBps + s.disk.writeBps)}/S` : "DISK —";
+    case "net": return s.net ? `NET ↓${fmtBytes(s.net.rxBps)} ↑${fmtBytes(s.net.txBps)}` : "NET —";
   }
 }
 
@@ -379,7 +392,19 @@ export function drawOverworldHi(cv: PixelCanvas, ctx: DrawCtx, st: OverworldStat
   lavaPit(cv, 224, 98, ctx);
 
   // structures (back to front)
-  for (const id of ["net", "cpu", "mem", "power", "proc", "disk"] as ZoneId[]) TILES[id](cv, pos[id].x, pos[id].y, ctx);
+  for (const id of ["net", "cpu", "mem", "power", "proc", "disk"] as ZoneId[]) {
+    const { x, y } = pos[id];
+    const box = LOCK_BOX[id];
+    if (box && zoneLocked(id, ctx.snap)) {
+      // 50% checker toward the sky's mid tone, then a padlock over the tile.
+      drawDimmed(cv, x + box.x, y + box.y, box.w, box.h, X.sky1, () => TILES[id](cv, x, y, ctx));
+    } else TILES[id](cv, x, y, ctx);
+  }
+  // padlocks after every structure so nothing in front hides them
+  for (const id of ["net", "power", "disk"] as const) {
+    const box = LOCK_BOX[id]!;
+    if (zoneLocked(id, ctx.snap)) outlined(cv, X.outline, (l) => l.blit(PADLOCK, pos[id].x + box.lx - 3, pos[id].y + box.ly - 4));
+  }
 
   // labels
   for (const z of Object.values(ZONES)) {
@@ -388,7 +413,8 @@ export function drawOverworldHi(cv: PixelCanvas, ctx: DrawCtx, st: OverworldStat
     const p = pos[z.id];
     const lx = z.id === "net" ? p.x + 50 : Math.round(p.x - textWidth(text) / 2);
     const ly = z.id === "net" ? p.y - 14 : p.y + 6;
-    drawText(cv, lx, ly, text, sel ? P.select : P.white, { shadow: X.outline });
+    const locked = zoneLocked(z.id, ctx.snap);
+    drawText(cv, lx, ly, text, sel ? P.select : locked ? P.dim : P.white, { shadow: X.outline });
     if (sel && Math.sin(ctx.t * 6) > -0.2) drawText(cv, lx - 8, ly, "▸", P.select, { shadow: X.outline });
   }
 

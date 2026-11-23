@@ -1,14 +1,25 @@
 import type { Frame } from "../../engine/canvas.ts";
 import { ditherGradientV } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
-import { PLAYER, drawGrass, drawHint, drawHud, drawStars, type DrawCtx } from "../common.ts";
+import { PLAYER, drawGrass, drawLockedPanel, drawHint, drawHud, drawStars, type DrawCtx } from "../common.ts";
 
-/** Stand-in for zones that aren't built yet. */
-export function drawPlaceholderZone(f: Frame, ctx: DrawCtx, name: string): void {
+/**
+ * Stand-in for zones that aren't built yet. When the zone's data needs sudo
+ * and is missing, the locked panel replaces the sign.
+ */
+export function drawPlaceholderZone(f: Frame, ctx: DrawCtx, name: string, locked = false): void {
   const cv = f.canvas;
   ditherGradientV(cv, 0, 0, 80, 34, [0x111630, 0x1b2347, 0x29356a, 0x3d4f88]);
   drawStars(cv, 20, ctx.t);
   drawGrass(cv, 34, 46);
+  if (locked) {
+    drawLockedPanel(f);
+    cv.blit(PLAYER[Math.floor(ctx.t * 2) % 2]!, 64, 36);
+    f.centered(40, 1, name, P.accent, undefined, true);
+    drawHud(f, ctx.snap);
+    drawHint(f, "esc back  q quit", "no data without sudo");
+    return;
+  }
   // sign post
   cv.vline(38, 22, 33, P.woodDark);
   cv.vline(41, 22, 33, P.woodDark);

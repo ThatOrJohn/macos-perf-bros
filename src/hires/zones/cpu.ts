@@ -1,7 +1,8 @@
 /**
  * Hi-res CPU Fortress: a castle courtyard with one brick tower per core.
  * Tower height = core busy %, banner height = cluster freq / max,
- * towers above 85% burn.
+ * towers above 85% burn. Without sudo there is no frequency data
+ * (maxFreqMHz 0): the banner is hidden and the header reads NO SUDO · FREQ N/A.
  */
 import { mix, type Color, type PixelCanvas } from "../../engine/canvas.ts";
 import { drawText, drawTextCentered, textWidth } from "../../engine/font5x7.ts";
@@ -129,9 +130,13 @@ export function drawCpuZoneHi(cv: PixelCanvas, ctx: DrawCtx): void {
     const busy = ctx.sm.get(`hi.busy.${kind}`, cl?.activePct ?? 0, ctx.dt);
     const mid = (x0 + x1) / 2;
     drawTextCentered(cv, mid, 25, `${s.name} ×${cores.length}`, s.text, { shadow: X.outline });
-    const sub = `${Math.round(freq)}/${max} MHZ  BUSY ${fmtPct(busy)}`;
-    drawText(cv, Math.round(mid - textWidth(sub) / 2), 35, sub, P.white, { shadow: X.outline });
-    banner(cv, wi === 0 ? 7 : 312, Math.min(1, freq / max), s, kind, ctx.t, wi === 0);
+    if (cl?.maxFreqMHz) {
+      const sub = `${Math.round(freq)}/${max} MHZ  BUSY ${fmtPct(busy)}`;
+      drawText(cv, Math.round(mid - textWidth(sub) / 2), 35, sub, P.white, { shadow: X.outline });
+      banner(cv, wi === 0 ? 7 : 312, Math.min(1, freq / max), s, kind, ctx.t, wi === 0);
+    } else {
+      drawTextCentered(cv, mid, 35, "NO SUDO · FREQ N/A", P.dim, { shadow: X.outline });
+    }
   });
 
   drawHudHi(cv, ctx.snap);

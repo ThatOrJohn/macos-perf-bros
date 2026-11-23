@@ -13,7 +13,7 @@ import { P } from "../engine/palette.ts";
 import { Smoother } from "../engine/tween.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import type { DrawCtx } from "./common.ts";
-import { ZONES, ZONE_ORDER, drawOverworld, neighbor, newOverworldState, stepPlayer, type ZoneId } from "./overworld.ts";
+import { ZONES, ZONE_ORDER, drawOverworld, zoneLocked, neighbor, newOverworldState, stepPlayer, type ZoneId } from "./overworld.ts";
 import { ProcessField } from "./process-field.ts";
 import { drawCpuZone } from "./zones/cpu.ts";
 import { drawMemoryZone } from "./zones/memory.ts";
@@ -90,7 +90,7 @@ export class Game {
       case "cpu": drawCpuZone(f, ctx); break;
       case "mem": drawMemoryZone(f, ctx); break;
       case "proc": drawProcessZone(f, ctx, this.processField); break;
-      default: drawPlaceholderZone(f, ctx, ZONES[this.scene].name);
+      default: drawPlaceholderZone(f, ctx, ZONES[this.scene].name, zoneLocked(this.scene, snap));
     }
     this.iris(f, t);
     return f;
@@ -106,7 +106,7 @@ export class Game {
       case "cpu": drawCpuZoneHi(cv, ctx); break;
       case "mem": drawMemoryZoneHi(cv, ctx); break;
       case "proc": drawProcessZoneHi(cv, ctx, this.processFieldHi); break;
-      default: drawPlaceholderZoneHi(cv, ctx, ZONES[this.scene].name);
+      default: drawPlaceholderZoneHi(cv, ctx, ZONES[this.scene].name, zoneLocked(this.scene, snap));
     }
     const k = (t - this.irisStart) / IRIS_S;
     if (k >= 0 && k < 1) {

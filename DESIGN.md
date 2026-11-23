@@ -70,7 +70,7 @@ perf-bros (user)  ──spawn──►  sudo -n /usr/bin/powermetrics ...   (roo
 Startup sequence:
 1. Before entering the alternate screen, run `sudo -v` so the password prompt appears as a normal terminal prompt.
 2. Spawn `sudo -n powermetrics …` as a child process and parse its stdout.
-3. If sudo fails or is declined, continue in **degraded mode**: per-core CPU comes from Mach `host_processor_info` via Bun FFI (no frequencies), memory and processes still work, and GPU, power, thermal, network and disk are unavailable. Locked-tile visuals for that state are a roadmap task.
+3. If sudo fails or is declined, continue in **degraded mode**: per-core CPU comes from Mach `host_processor_info` via Bun FFI (no frequencies), memory and processes still work, and GPU, power, thermal, network and disk are unavailable. Zones without data are drawn locked: the overworld tile is dimmed with a padlock and a `PWR —` style label, the zone scene shows a NEEDS SUDO panel, CPU Fortress hides its frequency banners, and the HUD shows a NO SUDO tag.
 4. On exit, signal the child and confirm it's gone.
 
 Optional later: document a sudoers entry scoped to `/usr/bin/powermetrics` with NOPASSWD.

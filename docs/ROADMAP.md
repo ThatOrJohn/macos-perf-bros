@@ -9,9 +9,11 @@ Read [AGENTS.md](../AGENTS.md) first. Its hard rules and definition of done appl
 | Data: powermetrics parser, memory/topology/ps collectors, FFI CPU fallback, sudo handling, live source, record/replay | ✅ done |
 | Engine: both renderers, palette, outlines/dither, 5×7 font, tweening, PNG stills, render tests | ✅ done |
 | Overworld: all six live tiles, navigation, iris transitions | ✅ done |
-| CPU Fortress, Memory Reservoir | ✅ done (both renderers) |
-| Network Sky, Disk Mines, Process Plains, Power Plant | ⬜ placeholder "under construction" scenes |
-| Degraded-mode visuals, boring mode, help/pause | ⬜ not started |
+| CPU Fortress, Memory Reservoir, Process Plains (R3) | ✅ done (both renderers) |
+| Synthetic scenarios + scenario stills (R1) | ✅ done |
+| Degraded-mode "locked" visuals (R2) | ✅ done. Locked zones use the placeholder scene with the locked panel; R4–R6 call `drawLockedPanel` / `drawLockedPanelHi` themselves |
+| Network Sky, Disk Mines, Power Plant | ⬜ placeholder "under construction" scenes |
+| Boring mode, help/pause | ⬜ not started |
 | Entity focus + detail cards (phase 6) | ⬜ later, needs design review first |
 | Action broker / stomp (phase 7) | 🚫 do not start |
 

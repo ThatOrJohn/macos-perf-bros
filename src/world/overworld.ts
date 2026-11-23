@@ -3,10 +3,11 @@
  * Paths are axis-aligned so the player walks straight between nodes.
  */
 import { Frame, mix, sprite, type PixelCanvas } from "../engine/canvas.ts";
-import { ditherGradientV, outlined } from "../engine/paint.ts";
+import { ditherGradientV, drawDimmed, outlined } from "../engine/paint.ts";
+import type { Snapshot } from "../core/snapshot.ts";
 import { P } from "../engine/palette.ts";
 import {
-  PLAYER, cpuTotalPct, drawCloud, drawGrass, drawHint, drawHud, drawSmoke, drawStars,
+  PADLOCK, PLAYER, cpuTotalPct, drawCloud, drawGrass, drawHint, drawHud, drawSmoke, drawStars,
   fmtBytes, fmtPct, pressureColor, type DrawCtx,
 } from "./common.ts";
 
@@ -30,6 +31,14 @@ export const ZONES: Record<ZoneId, ZoneNode> = {
   proc: { id: "proc", name: "PROCESS PLAINS", x: 14, y: 37, links: ["cpu", "disk"] },
   disk: { id: "disk", name: "DISK MINES", x: 66, y: 37, links: ["proc", "power"] },
 };
+
+/**
+ * Zones whose data only exists with sudo (powermetrics). Without it they're
+ * drawn dimmed with a padlock and the zone scene shows a locked panel.
+ */
+export function zoneLocked(id: ZoneId | "overworld", snap: Snapshot): boolean {
+  return id === "power" ? !snap.power : id === "net" ? !snap.net : id === "disk" ? !snap.disk : false;
+}
 
 export const ZONE_ORDER: ZoneId[] = ["cpu", "mem", "net", "disk", "proc", "power"];
 
@@ -233,7 +242,7 @@ function tileSmoke(cv: PixelCanvas, id: ZoneId, x: number, y: number, ctx: DrawC
     const cl = ctx.snap.cpu?.clusters ?? [];
     drawSmoke(cv, x - 5, y - 8, ctx.sm.get("ow.cpu.e", cl.find((c) => c.kind === "E")?.activePct ?? 0, 0) / 100, ctx.t, 1);
     drawSmoke(cv, x + 5, y - 8, ctx.sm.get("ow.cpu.p", cl.find((c) => c.kind === "P")?.activePct ?? 0, 0) / 100, ctx.t, 2);
-  } else if (id === "power") {
+  } else if (id === "power" && ctx.snap.power) {
     const heat = Math.min(1, ctx.sm.get("ow.pwr", ctx.snap.power?.packageW ?? 0, 0) / 15);
     drawSmoke(cv, x + 5, y - 10, 0.25 + heat * 0.75, ctx.t, 3);
   }
@@ -243,15 +252,16 @@ const TILES: Record<ZoneId, (cv: PixelCanvas, x: number, y: number, ctx: DrawCtx
   net: netTile, cpu: cpuTile, mem: memTile, power: powerTile, proc: procTile, disk: diskTile,
 };
 
+/** Locked zones read `PWR —`; the em dash says "no reading", not zero. */
 function label(id: ZoneId, ctx: DrawCtx): string {
   const s = ctx.snap;
   switch (id) {
     case "cpu": return `CPU ${fmtPct(cpuTotalPct(s))}`;
     case "mem": return s.memory ? `MEM ${fmtPct((s.memory.usedB / s.memory.totalB) * 100)}` : "MEM";
-    case "power": return s.power ? `PWR ${s.power.packageW.toFixed(1)}W` : "PWR";
+    case "power": return s.power ? `PWR ${s.power.packageW.toFixed(1)}W` : "PWR —";
     case "proc": return `PROCS ${s.procs.length}`;
-    case "disk": return s.disk ? `DISK ${fmtBytes(s.disk.readBps + s.disk.writeBps)}/s` : "DISK";
-    case "net": return s.net ? `NET ↓${fmtBytes(s.net.rxBps)}` : "NET";
+    case "disk": return s.disk ? `DISK ${fmtBytes(s.disk.readBps + s.disk.writeBps)}/s` : "DISK —";
+    case "net": return s.net ? `NET ↓${fmtBytes(s.net.rxBps)}` : "NET —";
   }
 }
 
@@ -282,15 +292,24 @@ export function drawOverworld(f: Frame, ctx: DrawCtx, st: OverworldState): void 
 
   // tiles + labels
   for (const z of Object.values(ZONES)) {
-    if (z.id === "net" || z.id === "proc") TILES[z.id](cv, z.x, z.y, ctx);
-    else outlined(cv, INK, (l) => TILES[z.id](l, z.x, z.y, ctx));
+    const locked = zoneLocked(z.id, ctx.snap);
+    const draw = () => {
+      if (z.id === "net" || z.id === "proc") TILES[z.id](cv, z.x, z.y, ctx);
+      else outlined(cv, INK, (l) => TILES[z.id](l, z.x, z.y, ctx));
+    };
+    if (locked) {
+      // Dim the tile toward the dark stone and hang a padlock on it.
+      drawDimmed(cv, z.x - 11, z.y - 11, 23, 18, P.stoneDeep, draw);
+      outlined(cv, INK, (l) => l.blit(PADLOCK, z.x - 1, z.y - 2));
+    } else draw();
     tileSmoke(cv, z.id, z.x, z.y, ctx);
     const sel = st.selected === z.id;
     const text = label(z.id, ctx);
     const row = z.id === "net" ? Frame.rowOf(z.y) : Frame.rowOf(z.y + 6);
     const col = z.id === "net" ? z.x + 11 : Math.round(z.x - text.length / 2);
     if (sel && Math.sin(ctx.t * 6) > -0.2) f.text(col - 1, row, "▸", P.select);
-    f.text(col, row, text, sel ? P.select : P.white, undefined, sel);
+    // Locked labels sit on the dimmed tile; an ink backing keeps them legible.
+    f.text(col, row, text, sel ? P.select : locked ? P.dim : P.white, locked ? P.ink : undefined, sel);
   }
 
   // player

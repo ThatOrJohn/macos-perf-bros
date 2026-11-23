@@ -3,9 +3,9 @@
  * sprites, HUD with icons, hint bar, and backdrops.
  */
 import { PixelCanvas, mix, sprite, type Color, type Sprite } from "../engine/canvas.ts";
-import { drawText, drawTextRight, textWidth } from "../engine/font5x7.ts";
+import { drawText, drawTextCentered, drawTextRight, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
-import { bayer, blitOutlined, disc, ditherGradientV, glow } from "../engine/paint.ts";
+import { bayer, bevel, blitOutlined, disc, ditherGradientV, glow, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { cpuTotalPct, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
 
@@ -139,6 +139,21 @@ export const BOSS: Sprite = sprite([
   "..dddddddddddddd..",
 ], { s: P.lava, L: P.lavaHi, d: P.ember, w: P.white, k: X.outline, h: P.stoneLight, m: X.outline, y: P.white });
 
+/**
+ * Padlock for locked (no-sudo) zones, 7×8 before outlining. Original art:
+ * metal shackle, gold body lit from the top-left, ink keyhole.
+ */
+export const PADLOCK: Sprite = sprite([
+  "..MMM..",
+  ".M...m.",
+  ".M...m.",
+  "LLLLLLa",
+  "Laakaad",
+  "Laakaad",
+  "aaaaadd",
+  "ddddddd",
+], { M: P.metalLight, m: P.metal, L: P.glow, a: P.accent, d: P.pathDark, k: X.outline });
+
 export const CART: Sprite = sprite([
   "..a.b..c.a....",
   ".abbcaacbba...",
@@ -227,7 +242,10 @@ export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
     : { icon: ICON.plug, text: "AC", color: P.hudFg });
 
   const up = fmtUptime(snap.uptimeS);
-  const limit = W - textWidth(up) - 8;
+  // Without sudo, a NO SUDO tag sits before the uptime; the left items yield to it.
+  const tag = snap.privileged ? "" : "NO SUDO";
+  const tagX = W - 3 - textWidth(up) - 8 - textWidth(tag);
+  const limit = tag ? tagX - 6 : W - textWidth(up) - 8;
   let x = 3;
   for (const it of items) {
     const w = 9 + textWidth(it.text) + 7;
@@ -236,7 +254,32 @@ export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
     drawText(cv, x + 9, 2, it.text, it.color);
     x += w;
   }
+  if (tag) drawText(cv, tagX, 2, tag, P.warn);
   drawTextRight(cv, W - 3, 2, up, P.dim);
+}
+
+/**
+ * Centered panel for a zone scene whose data needs sudo: padlock,
+ * NEEDS SUDO, and how to get it. Spans x 74–245, y 62–125.
+ */
+export function drawLockedPanelHi(cv: PixelCanvas): void {
+  outlined(cv, X.outline, (l) => {
+    bevel(l, 74, 62, 172, 64, P.stoneDark, P.stoneLight, P.stoneDeep);
+    bevel(l, 77, 65, 166, 58, P.hudBg, P.stoneDeep, P.stone);
+  });
+  outlined(cv, X.outline, (l) => blitScaled2(l, PADLOCK, W / 2 - 7, 72));
+  drawTextCentered(cv, W / 2, 96, "NEEDS SUDO", P.accent, { shadow: X.outline });
+  drawTextCentered(cv, W / 2, 108, "RESTART WITHOUT --NO-SUDO", P.dim);
+}
+
+/** 2× nearest-neighbor blit for small sprites. */
+function blitScaled2(cv: PixelCanvas, s: Sprite, x: number, y: number): void {
+  for (let sy = 0; sy < s.h; sy++) {
+    for (let sx = 0; sx < s.w; sx++) {
+      const c = s.px[sy * s.w + sx]!;
+      if (c >= 0) cv.rect(x + sx * 2, y + sy * 2, 2, 2, c);
+    }
+  }
 }
 
 export function drawHintHi(cv: PixelCanvas, left: string, right = ""): void {
