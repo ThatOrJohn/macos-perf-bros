@@ -5,12 +5,13 @@
 import { mix, type PixelCanvas } from "../engine/canvas.ts";
 import { drawText, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
-import { bayer, bevel, bricks, disc, dither, drawDimmed, glow, line, outlined } from "../engine/paint.ts";
+import { bevel, bricks, disc, dither, drawDimmed, glow, line, outlined } from "../engine/paint.ts";
 import { cpuTotalPct, fmtBytes, fmtPct, hash, pressureColor, type DrawCtx } from "../world/common.ts";
+import { drawPacketStreak } from "../world/net-sky.ts";
 import { ZONES, zoneLocked, type OverworldState, type ZoneId } from "../world/overworld.ts";
 import {
   BOSS, CART, FLAME, PADLOCK, PINE, SLIMES, TREE, W, X,
-  drawGrassField, drawHintHi, drawHudHi, drawMountains, drawNightSky, drawRobot, drawSmokeHi,
+  drawCloudHi, drawMastHi, drawGrassField, drawHintHi, drawHudHi, drawMountains, drawNightSky, drawRobot, drawSmokeHi,
 } from "./common.ts";
 
 /** Low-res node coordinates → hi-res "door" points (where the player stands). */
@@ -238,40 +239,10 @@ function cloudIsland(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): voi
   // packets: inbound (green) right→left high, outbound (yellow) left→right low
   const rx = Math.min(1, Math.log10(1 + (ctx.snap.net?.rxBps ?? 0)) / 7);
   const tx = Math.min(1, Math.log10(1 + (ctx.snap.net?.txBps ?? 0)) / 7);
-  const streak = (hx: number, y: number, dir: number, c: number) => {
-    for (let k = 0; k < 10; k++) {
-      const px = Math.round(hx - dir * k);
-      if (k < 3 || k / 10 < 1 - bayer(px, y)) cv.set(px, y, k === 0 ? P.white : c);
-    }
-  };
-  for (let i = 0; i < Math.round(rx * 8); i++) streak(W + 10 - ((ctx.t * 70 + i * 47) % (W + 20)), 16 + (i % 3) * 4, -1, P.ok);
-  for (let i = 0; i < Math.round(tx * 8); i++) streak(((ctx.t * 70 + i * 47 + 20) % (W + 20)) - 10, 44 + (i % 2) * 4, 1, P.accent);
+  for (let i = 0; i < Math.round(rx * 8); i++) drawPacketStreak(cv, W + 10 - ((ctx.t * 70 + i * 47) % (W + 20)), 16 + (i % 3) * 4, -1, P.ok, 10);
+  for (let i = 0; i < Math.round(tx * 8); i++) drawPacketStreak(cv, ((ctx.t * 70 + i * 47 + 20) % (W + 20)) - 10, 44 + (i % 2) * 4, 1, P.accent, 10);
 
-  outlined(cv, X.cloudOutline, (l) => {
-    const blobs = [[-26, 4, 9], [-12, -2, 12], [6, -5, 13], [22, 0, 11], [34, 5, 7], [-34, 7, 6], [0, 6, 12], [18, 7, 9]] as const;
-    for (const [bx, by, r] of blobs) disc(l, dx + bx, dy + by, r, P.cloud);
-    for (const [bx, by, r] of blobs) {
-      for (let y = -r; y <= r; y++) {
-        for (let x = -r; x <= r; x++) {
-          if (x * x + y * y > r * r) continue;
-          const px = dx + bx + x;
-          const py = dy + by + y;
-          if (py > dy + 6) l.set(px, py, dither(px, py, P.cloudShade, P.cloud, 0.25));
-        }
-      }
-    }
-    // radio mast
-    const mx = dx + 22;
-    for (let y = dy - 26; y < dy - 8; y++) {
-      const half = Math.round(((y - (dy - 26)) / 18) * 3);
-      l.set(mx - half, y, P.metal);
-      l.set(mx + half, y, P.metalLight);
-      if (y % 3 === 0) l.hline(mx - half, mx + half, y, P.stoneDark);
-    }
-    // dish
-    for (let i = -4; i <= 4; i++) l.set(mx - 8 + Math.round(i * 0.3), dy - 18 + i, P.metalLight);
-    l.hline(mx - 7, mx - 2, dy - 18, P.metal);
-  });
+  drawCloudHi(cv, dx, dy, 1, (layer) => drawMastHi(layer, dx + 22, dy - 26, dy - 8, 3));
   const blink = Math.sin(ctx.t * 5) > 0;
   if (blink) glow(cv, dx + 22, dy - 28, 5, P.crit, 0.7);
   cv.set(dx + 22, dy - 28, blink ? P.crit : P.ember);

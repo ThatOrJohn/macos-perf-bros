@@ -182,8 +182,10 @@ A tile map of zones connected by paths. The player sprite walks between zones wi
 - Unified memory: the GPU draws from the same tank. That's accurate on Apple Silicon and worth showing.
 
 **Network Sky**
-- Particles cross the sky: inbound flies right-to-left, outbound left-to-right. Density = bytes/sec on a log scale.
-- Zoomed in: each active connection is a named cloud (process + remote host), sized by throughput.
+- Green inbound streaks move right-to-left and gold outbound streaks move left-to-right. Their counts follow bytes/s on a log scale capped at 10 MB/s (14 per direction in hi-res and six in half-block). Directional packets/s sets speed on a log scale capped at 100,000 packets/s.
+- The five busiest network processes in hi-res and four in half-block occupy PID-stable cloud slots. A cloud scales from 0.6 to 1.2 with its combined throughput, eases in and out, and shows the process name and both directional rates.
+- The radio beacon blinks from 0.5 to 3.5 Hz with total packets/s and shows the packet rate. The bottom graph charts 60 samples of inbound and outbound throughput, taking one sample per snapshot second.
+- Zero traffic shows an empty sky and flat history after sustained idle. Missing system-wide network data shows the locked panel.
 
 **Disk Mines**
 - Two rail lines underground: read and write. Cart frequency and speed = throughput.

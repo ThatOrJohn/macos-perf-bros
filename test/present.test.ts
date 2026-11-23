@@ -161,3 +161,26 @@ test("incremental half-block updates match a full redraw, across scene changes a
   b.renderer.destroy();
   c.renderer.destroy();
 });
+
+test("Network Sky renders traffic, idle, degraded and empty process snapshots in both renderers", async () => {
+  const [burst, idle, degraded] = await Promise.all(
+    ["net-burst", "idle", "degraded"].map(async (name) => (await loadNdjsonReplay(`${scenarioDir}/${name}.ndjson`)).at(10)),
+  );
+  const empty: Snapshot = { ...idle!, procs: [] };
+  const fixtures = [
+    { snap: burst!, label: "PKT/S", clouds: true },
+    { snap: idle!, label: "NO TRAFFIC", clouds: false },
+    { snap: degraded!, label: "NEEDS SUDO", clouds: false },
+    { snap: empty, label: "NO TRAFFIC", clouds: false },
+  ];
+  for (const { snap, label, clouds } of fixtures) {
+    const game = new Game();
+    game.key("3");
+    const frame = game.draw(snap, 1, 0.3);
+    const canvas = game.drawHi(snap, 1, 0.3);
+    expect(frame.texts.some(({ text }) => text === "NETWORK SKY")).toBe(true);
+    expect(frame.texts.some(({ text }) => text === label)).toBe(true);
+    expect(frame.canvas.px.includes(P.cloud)).toBe(clouds);
+    expect(canvas.px.includes(P.cloud)).toBe(clouds);
+  }
+});
