@@ -3,7 +3,8 @@
  * and the 60-s graph on the log scale capped at 10 MB/s. Directional packets/s
  * ease each lane's speed from 60 to 180 px/s; their sum drives the mast beacon
  * (0.5–3.5 Hz, log scale capped at 100k packets/s). Five PID-stable clouds
- * scale 0.6–1.2 with process rx + tx bytes/s. Labels give the current rates.
+ * scale 0.6–1.2 with process rx + tx bytes/s, ordered by a per-PID key so both
+ * renderers agree. The graph shows only measured seconds. Labels give the rates.
  */
 import type { NetThroughput } from "../../core/snapshot.ts";
 import type { PixelCanvas } from "../../engine/canvas.ts";
@@ -18,18 +19,21 @@ import { W, X, drawCloudHi, drawHintHi, drawHudHi, drawLockedPanelHi, drawMastHi
 const SHADOW = { shadow: X.outline };
 const INBOUND = [36, 43, 50, 57];
 const OUTBOUND = [132, 139, 146];
-const cloudX = (slot: number) => 34 + 54 * slot;
+// Cloud band x 7–277 (5 slots of 54).
+const BAND = [7, 277] as const;
 
 function drawClouds(cv: PixelCanvas, sky: NetSky): void {
-  for (const [slot, cloud] of sky.clouds.slots.entries()) {
-    if (!cloud || cloud.presence === 0) continue;
+  const { clouds } = sky.clouds;
+  for (const cloud of clouds) {
+    if (cloud.presence === 0) continue;
     // Fit the shared 82 px island silhouette into a 54 px slot, including 2 px of ink.
-    drawCloudHi(cv, cloudX(slot), 80, 0.49 * cloud.scale * cloud.presence);
+    drawCloudHi(cv, sky.clouds.center(cloud, ...BAND), 80, 0.49 * cloud.scale * cloud.presence);
   }
-  for (const [slot, cloud] of sky.clouds.slots.entries()) {
-    if (!cloud || cloud.departing || cloud.presence === 0) continue;
+  // Labels only for settled clouds, so a join/leave glide never overlaps text.
+  for (const cloud of clouds) {
+    if (cloud.departing || cloud.presence < 1) continue;
     const { name, netRxBps, netTxBps } = cloud.proc;
-    const x = cloudX(slot);
+    const x = sky.clouds.center(cloud, ...BAND);
     // Keep eight name characters and leave a full glyph of space between slots.
     const label = processName(name, 9).slice(0, 8);
     drawTextCentered(cv, x, 94, label, P.white, SHADOW);
@@ -74,7 +78,7 @@ export function drawNetworkZoneHi(cv: PixelCanvas, ctx: DrawCtx, sky: NetSky, ne
   drawRadio(cv, net.rxPps + net.txPps, sky.beacon);
   bevel(cv, 4, 154, 312, 25, P.hudBg, P.stoneDeep, P.stoneDeep);
   drawText(cv, 9, 163, "60S", P.dim);
-  drawNetHistory(cv, sky.history, 32, 237, 174, 15);
+  drawNetHistory(cv, sky.history, Math.floor(ctx.snap.t / 1000), 32, 237, 174, 15);
   drawTextRight(cv, 311, 157, rx, P.ok);
   drawTextRight(cv, 311, 168, tx, P.accent);
   drawHintHi(cv, "ESC BACK  Q QUIT", "↓ IN  ↑ OUT  LOG SCALE");

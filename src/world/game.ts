@@ -15,7 +15,7 @@ import { Smoother } from "../engine/tween.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import type { DrawCtx } from "./common.ts";
 import { ZONES, ZONE_ORDER, drawOverworld, zoneLocked, neighbor, newOverworldState, stepPlayer, type ZoneId } from "./overworld.ts";
-import { NetSky } from "./net-sky.ts";
+import { NetHistory, NetSky } from "./net-sky.ts";
 import { ProcessField } from "./process-field.ts";
 import { drawCpuZone } from "./zones/cpu.ts";
 import { drawMemoryZone } from "./zones/memory.ts";
@@ -37,8 +37,11 @@ export class Game {
   // A returned Frame / PixelCanvas is valid until the next draw() / drawHi().
   private readonly frame = new Frame();
   private readonly canvasHi = new PixelCanvas(HI_W, HI_H);
-  private readonly netSky = new NetSky(4, 6, 18);
-  private readonly netSkyHi = new NetSky(5, 14, 60);
+  // One throughput history for both renderers, recorded every frame in every
+  // scene, so Network Sky's 60 s graph is complete when you walk in.
+  private readonly netHistory = new NetHistory();
+  private readonly netSky = new NetSky(this.netHistory, 4, 6, 18);
+  private readonly netSkyHi = new NetSky(this.netHistory, 5, 14, 60);
   private irisStart = -Infinity;
   private irisCenter = { x: 40, y: 23 };
   private now = 0;
@@ -92,6 +95,11 @@ export class Game {
     this.irisStart = this.now;
   }
 
+  /** Feed scene-independent history (once per snapshot second; cheap otherwise). */
+  private record(snap: Snapshot): void {
+    if (snap.net) this.netHistory.record(snap.t, snap.net.rxBps, snap.net.txBps);
+  }
+
   /** Advance animation state once per frame (shared by both renderers). */
   private tick(t: number, dt: number): void {
     this.now = t;
@@ -101,6 +109,7 @@ export class Game {
   /** Low-res (80×46 half-block) frame. */
   draw(snap: Snapshot, t: number, dt: number): Frame {
     this.tick(t, dt);
+    this.record(snap);
     const f = this.frame.reset();
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
     switch (this.scene) {
@@ -118,6 +127,7 @@ export class Game {
   /** Hi-res (320×192) frame for pixel-image terminals. */
   drawHi(snap: Snapshot, t: number, dt: number): PixelCanvas {
     this.tick(t, dt);
+    this.record(snap);
     const cv = this.canvasHi;
     cv.px.fill(0);
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };

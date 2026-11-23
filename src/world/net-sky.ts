@@ -10,81 +10,109 @@ export const NET_HISTORY_SECONDS = 60;
 export const netLevel = (bps: number) => Math.min(1, Math.log10(1 + Math.max(0, bps)) / 7);
 export const packetLevel = (pps: number) => Math.min(1, Math.log10(1 + Math.max(0, pps)) / 5);
 
-interface NetSample { rx: number; tx: number }
+interface NetSample { second: number; rx: number; tx: number }
+const mod = (n: number, m: number) => ((n % m) + m) % m;
 
+/**
+ * The last 60 s of system throughput, stored by the snapshot's own second so
+ * the graph's time axis is real: a second with no reading stays a gap, and
+ * nothing is padded or invented (AGENTS.md rule 1). `Game` records into one
+ * shared history on every frame, in every scene.
+ */
 export class NetHistory {
-  private readonly samples: NetSample[] = Array.from({ length: NET_HISTORY_SECONDS }, () => ({ rx: 0, tx: 0 }));
-  private second = -Infinity;
-  private next = 0;
-  size = 0;
+  private readonly samples: NetSample[] = Array.from({ length: NET_HISTORY_SECONDS }, () => ({ second: -Infinity, rx: 0, tx: 0 }));
+  /** Newest recorded second, or -Infinity. */
+  latest = -Infinity;
 
-  record(t: number, rx: number, tx: number): void {
-    const second = Math.floor(t / 1000);
-    if (second === this.second) return;
-    this.second = second;
-    const sample = this.samples[this.next]!;
+  /** Keeps the first reading of each second; ignores time going backwards. */
+  record(tMs: number, rx: number, tx: number): void {
+    const second = Math.floor(tMs / 1000);
+    if (second <= this.latest) return;
+    const sample = this.samples[mod(second, NET_HISTORY_SECONDS)]!;
+    sample.second = second;
     sample.rx = rx;
     sample.tx = tx;
-    this.next = (this.next + 1) % NET_HISTORY_SECONDS;
-    this.size = Math.min(this.size + 1, NET_HISTORY_SECONDS);
+    this.latest = second;
   }
 
-  /** Oldest on the left. Pad uncollected history with the first sample. */
-  at(column: number): Readonly<NetSample> {
-    const age = Math.min(NET_HISTORY_SECONDS - 1 - column, Math.max(0, this.size - 1));
-    return this.samples[(this.next - 1 - age + NET_HISTORY_SECONDS) % NET_HISTORY_SECONDS]!;
+  /** Column 0 is 59 s before `nowSecond`, column 59 is `nowSecond`; undefined where nothing was measured. */
+  at(column: number, nowSecond = this.latest): Readonly<NetSample> | undefined {
+    const wanted = nowSecond - (NET_HISTORY_SECONDS - 1 - column);
+    const sample = this.samples[mod(wanted, NET_HISTORY_SECONDS)]!;
+    return sample.second === wanted ? sample : undefined;
   }
 }
 
 const totalRate = (p: Proc) => p.netRxBps + p.netTxBps;
 
-interface Cloud {
+export interface Cloud {
   proc: Proc;
+  /** Stable per-PID order key: clouds sit left to right by key in both renderers. */
+  readonly key: number;
   readonly sm: Smoother;
   scale: number;
   presence: number;
   departing: boolean;
+  /** Eased position in slot units (0 = leftmost). */
+  pos: number;
 }
 
-/** The slot array owns the clouds, including departures until their fade ends. */
+/**
+ * The busiest network processes as clouds. Membership (top `limit` by
+ * rx + tx bytes/s, rate > 0) is recomputed once per snapshot second; easing
+ * runs every frame. Clouds are ordered by a per-PID key, never by rank, so a
+ * ranking change never moves a cloud, and the 4 low-res clouds keep the same
+ * relative order as the 5 hi-res ones. Joins and departures make neighbors
+ * glide aside rather than jump.
+ */
 export class CloudSlots {
-  readonly slots: (Cloud | undefined)[];
+  readonly clouds: Cloud[] = [];
+  /** Eased slot count used for spacing: `limit`, or more while a departure overlaps a join. */
+  spread: number;
+  private second = NaN;
+  private readonly sm = new Smoother();
 
-  constructor(limit: number) {
-    this.slots = Array.from({ length: limit });
+  constructor(readonly limit: number) {
+    this.spread = limit;
   }
 
-  update(procs: readonly Proc[], dt: number): void {
-    const { slots } = this;
-    const top = procs.filter((proc) => totalRate(proc) > 0)
-      .sort((a, b) => totalRate(b) - totalRate(a) || a.pid - b.pid)
-      .slice(0, slots.length);
-
-    for (const [i, cloud] of slots.entries()) {
-      if (!cloud) continue;
-      const proc = top.find(({ pid }) => pid === cloud.proc.pid);
-      cloud.departing = proc === undefined;
-      if (proc) {
-        cloud.proc = proc;
-        cloud.scale = cloud.sm.get("size", cloudScale(proc), dt);
-        cloud.presence = Math.min(1, cloud.presence + dt / 0.2);
-      } else {
-        cloud.presence = Math.max(0, cloud.presence - dt / 0.3);
-        if (cloud.presence === 0) slots[i] = undefined;
+  /** `tMs` gates the ranking to once per second; omit it to re-rank on every call. */
+  update(procs: readonly Proc[], dt: number, tMs?: number): void {
+    const second = tMs === undefined ? NaN : Math.floor(tMs / 1000);
+    if (!(second === this.second)) {
+      this.second = second;
+      const top = procs.filter((proc) => totalRate(proc) > 0)
+        .sort((a, b) => totalRate(b) - totalRate(a) || a.pid - b.pid)
+        .slice(0, this.limit);
+      for (const cloud of this.clouds) {
+        const proc = top.find(({ pid }) => pid === cloud.proc.pid);
+        cloud.departing = proc === undefined;
+        if (proc) cloud.proc = proc;
       }
-    }
-
-    for (const proc of top) {
-      if (slots.some((cloud) => cloud?.proc.pid === proc.pid)) continue;
-      const preferred = Math.floor(hash(proc.pid, 0, 59) * slots.length);
-      for (let offset = 0; offset < slots.length; offset++) {
-        const slot = (preferred + offset) % slots.length;
-        if (slots[slot]) continue;
-        const sm = new Smoother();
-        slots[slot] = { proc, sm, scale: sm.get("size", cloudScale(proc), dt), presence: Math.min(1, dt / 0.2), departing: false };
-        break;
+      for (const proc of top) {
+        if (this.clouds.some((cloud) => cloud.proc.pid === proc.pid)) continue;
+        this.clouds.push({ proc, key: hash(proc.pid, 0, 59), sm: new Smoother(), scale: cloudScale(proc), presence: 0, departing: false, pos: NaN });
       }
+      this.clouds.sort((a, b) => a.key - b.key);
     }
+    for (let i = this.clouds.length - 1; i >= 0; i--) {
+      const cloud = this.clouds[i]!;
+      cloud.presence = cloud.departing ? Math.max(0, cloud.presence - dt / 0.3) : Math.min(1, cloud.presence + dt / 0.2);
+      if (cloud.departing && cloud.presence === 0) this.clouds.splice(i, 1);
+      else cloud.scale = cloud.sm.get("size", cloudScale(cloud.proc), dt);
+    }
+    const n = this.clouds.length;
+    this.spread = this.sm.get("spread", Math.max(this.limit, n), dt);
+    // Center the row of clouds in the band, so fewer clouds don't hug the left edge.
+    const offset = (this.limit - Math.min(n, this.limit)) / 2;
+    for (const [i, cloud] of this.clouds.entries()) {
+      cloud.pos = Number.isNaN(cloud.pos) ? i + offset : cloud.sm.get("pos", i + offset, dt);
+    }
+  }
+
+  /** Cloud center x within a band [left, right). */
+  center(cloud: Cloud, left: number, right: number): number {
+    return Math.round(left + ((cloud.pos + 0.5) * (right - left)) / this.spread);
   }
 }
 
@@ -93,7 +121,6 @@ function cloudScale(proc: Proc): number {
 }
 
 export class NetSky {
-  readonly history = new NetHistory();
   readonly clouds: CloudSlots;
   private readonly sm = new Smoother();
   rxCount = 0;
@@ -104,14 +131,13 @@ export class NetSky {
   private clock: number | undefined;
   private beaconPhase = 0;
 
-  constructor(cloudLimit: number, private readonly streakLimit: number, private readonly baseSpeed: number) {
+  constructor(readonly history: NetHistory, cloudLimit: number, private readonly streakLimit: number, private readonly baseSpeed: number) {
     this.clouds = new CloudSlots(cloudLimit);
   }
 
   update(net: NetThroughput, procs: readonly Proc[], timestamp: number, t: number, dt: number): void {
     const { rxBps, txBps, rxPps, txPps } = net;
-    this.history.record(timestamp, rxBps, txBps);
-    this.clouds.update(rxBps || txBps ? procs : [], dt);
+    this.clouds.update(rxBps || txBps ? procs : [], dt, timestamp);
     this.rxCount = this.streakCount("rx.count", rxBps, dt);
     this.txCount = this.streakCount("tx.count", txBps, dt);
     // Integrate the eased speeds so a new packet rate changes velocity without jumping lanes.
@@ -149,21 +175,29 @@ export function drawPacketLanes(cv: PixelCanvas, state: NetSky, width: number, t
   }
 }
 
-export function drawNetHistory(cv: PixelCanvas, history: NetHistory, left: number, right: number, baseline: number, height: number): void {
-  const first = history.at(0);
-  let lastX = left;
-  let lastRx = baseline - Math.round(height * netLevel(first.rx));
-  let lastTx = baseline - 1 - Math.round(height * netLevel(first.tx));
-  // Adjacent zero baselines keep both directions visible when resting at zero.
-  for (let i = 1; i < NET_HISTORY_SECONDS; i++) {
-    const sample = history.at(i);
-    const x = left + Math.round((right - left) * i / (NET_HISTORY_SECONDS - 1));
+/**
+ * Rx (green) and tx (gold, 1 px above so both stay visible at zero) over the
+ * last 60 s, right edge = `nowSecond`. Only measured seconds are drawn; a gap
+ * breaks the line, and a lone sample is a single dot.
+ */
+export function drawNetHistory(cv: PixelCanvas, history: NetHistory, nowSecond: number, left: number, right: number, baseline: number, height: number): void {
+  let prev: { x: number; rx: number; tx: number } | undefined;
+  for (let i = 0; i < NET_HISTORY_SECONDS; i++) {
+    const sample = history.at(i, nowSecond);
+    if (!sample) {
+      prev = undefined;
+      continue;
+    }
+    const x = left + Math.round(((right - left) * i) / (NET_HISTORY_SECONDS - 1));
     const rx = baseline - Math.round(height * netLevel(sample.rx));
     const tx = baseline - 1 - Math.round(height * netLevel(sample.tx));
-    line(cv, lastX, lastRx, x, rx, P.ok);
-    line(cv, lastX, lastTx, x, tx, P.accent);
-    lastX = x;
-    lastRx = rx;
-    lastTx = tx;
+    if (prev) {
+      line(cv, prev.x, prev.rx, x, rx, P.ok);
+      line(cv, prev.x, prev.tx, x, tx, P.accent);
+    } else {
+      cv.set(x, rx, P.ok);
+      cv.set(x, tx, P.accent);
+    }
+    prev = { x, rx, tx };
   }
 }
