@@ -172,10 +172,10 @@ function powerTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
 }
 
 // Process critters: original slime blobs, colored per slot; the boss glows hot.
-const SLIME_COLORS = [P.bodyTeal, P.compressedLight, P.warn, P.grassLight, P.eBrickLight, P.pBrickLight];
+export const SLIME_COLORS = [P.bodyTeal, P.compressedLight, P.warn, P.grassLight, P.eBrickLight, P.pBrickLight];
 const slime = (c: number) => sprite([".ss.", "sese", "ssss"], { s: c, e: P.ink });
-const SLIMES = SLIME_COLORS.map(slime);
-const BOSS = sprite(["..s..", ".sss.", "seses", "sssss"], { s: P.lava, e: P.lavaHi });
+export const SLIMES = SLIME_COLORS.map(slime);
+export const BOSS = sprite(["..s..", ".sss.", "seses", "sssss"], { s: P.lava, e: P.lavaHi });
 
 function procTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
   // fence

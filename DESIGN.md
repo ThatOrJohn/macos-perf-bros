@@ -190,9 +190,10 @@ A tile map of zones connected by paths. The player sprite walks between zones wi
 - Each mounted volume is a shaft whose depth fill = capacity used.
 
 **Process Plains**
-- Each top process is an enemy sprite. Size = RSS, walk speed = CPU%, glow = energy impact.
-- The top consumer is the **boss**, with a health bar showing its CPU%.
-- Sprite archetypes come from a small set keyed by process category (app, daemon, kernel_task, dev tool) to keep the art budget small.
+- The top twelve processes by CPU in hi-res and six in half-block appear as slimes in a fenced dusk meadow. A slime keeps its slot and color by PID while ranked. New entries grow in and departures shrink away.
+- Slime size follows RSS buckets below 100 MB, below 1 GB, and 1 GB or more. Unknown RSS uses the middle size and a dash. Higher CPU means faster hops. Energy impact above 100 gives the slime a gold halo and an energy readout.
+- The top consumer becomes the **boss** above 50% CPU. Its health bar fills at 100% of one core, and the label shows the full CPU percentage, including multicore usage.
+- Slime labels show rank, CPU, and RSS. The leaderboard shows the top eight names in hi-res and five in half-block, plus idle wakeups per second summed across the displayed slimes.
 
 **Power Plant**
 - Three generators: CPU, GPU, and ANE. Turbine speed = watts.

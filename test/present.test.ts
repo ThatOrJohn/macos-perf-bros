@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { loadNdjsonReplay } from "../src/core/recorder.ts";
 import { loadFixtureReplay } from "../src/core/replay.ts";
+import type { Snapshot } from "../src/core/snapshot.ts";
+import { P } from "../src/engine/palette.ts";
 import { PixelView } from "../src/engine/present-opentui.ts";
 import { Game } from "../src/world/game.ts";
 import { ZONE_ORDER } from "../src/world/overworld.ts";
@@ -70,6 +72,33 @@ test("hi-res frames render every scene and publish through the image presenter",
 });
 
 const scenarioDir = "fixtures/scenarios";
+
+test("Process Plains renders the ranked boss and handles missing RSS and empty process data", async () => {
+  const replay = await loadNdjsonReplay(`${scenarioDir}/cpu-fire.ndjson`);
+  const degraded = await loadNdjsonReplay(`${scenarioDir}/degraded.ndjson`);
+  const empty: Snapshot = { ...degraded.at(0), procs: [] };
+  const unknownRss: Snapshot = { ...degraded.at(0), procs: [{ ...degraded.at(0).procs[0]!, rssB: undefined }] };
+  const low = new Game();
+  const high = new Game();
+  low.key("5");
+  high.key("5");
+  const frames = (snap: Snapshot, t: number) => [low.draw(snap, t, 0.4), high.drawHi(snap, t, 0.4)] as const;
+
+  const [loaded, loadedHi] = frames(replay.at(10), 1);
+  expect(loaded.texts.some(({ text, row }) => row === 1 && text === "PROCESS PLAINS")).toBe(true);
+  expect(loaded.texts.some(({ text, row }) => row === 4 && text === "265%")).toBe(true);
+  expect(loaded.texts.filter(({ row, text }) => row >= 4 && row <= 8 && text === "■")).toHaveLength(5);
+  expect(loaded.canvas.px.includes(P.lava)).toBe(true);
+  expect(loadedHi.px.includes(P.lava)).toBe(true);
+
+  const [partial, partialHi] = frames(unknownRss, 2);
+  expect(partial.texts.some(({ row, text }) => row === 4 && text === "-")).toBe(true);
+  expect(partialHi.px.includes(P.lava)).toBe(false);
+  const [vacant, vacantHi] = frames(empty, 3);
+  expect(vacant.texts.some(({ text }) => text === "NO PROCESSES")).toBe(true);
+  expect(vacantHi.px.includes(P.lava)).toBe(false);
+});
+
 for (const file of [...new Bun.Glob("*.ndjson").scanSync({ cwd: scenarioDir, onlyFiles: true })].sort()) {
   test(`${file} renders every sample in every scene in both renderers`, async () => {
     const replay = await loadNdjsonReplay(`${scenarioDir}/${file}`);

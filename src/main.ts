@@ -70,6 +70,7 @@ if (args.png) {
       { name: "4-cpu-load", keys: ["return"], t: 8.5 },
       { name: "5-memory", keys: ["right", "return"], t: 2.5 },
       { name: "6-placeholder", keys: ["6"], t: 2.5 },
+      { name: "7-process", keys: ["5"], t: 8.5 },
     ];
     await renderStills(args.png, await openReplay(args.replay ?? FIXTURE), shots);
   }
