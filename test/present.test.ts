@@ -184,3 +184,30 @@ test("Network Sky renders traffic, idle, degraded and empty process snapshots in
     expect(canvas.px.includes(P.cloud)).toBe(clouds);
   }
 });
+
+test("the Kitty presenter keeps publishing past the image pool's capacity", async () => {
+  // Regression: publishRgba's handle was never released, so after 3 frames
+  // every publish returned null and the hi-res picture froze.
+  const { ImagePresenter } = await import("../src/engine/present-image.ts");
+  const { PixelCanvas } = await import("../src/engine/canvas.ts");
+  const { renderer, renderOnce } = await createTestRenderer({ width: 80, height: 24 });
+  const img = new ImagePresenter(renderer, { scale: 1 });
+  renderer.root.add(img.view);
+  const cv = new PixelCanvas(320, 192);
+  for (let i = 0; i < 12; i++) {
+    cv.px.fill(0x101010 * (i + 1)); // a different frame each time
+    img.present(cv);
+    await renderOnce();
+  }
+  // The view must hold the 12th frame's pixels, not a stale 3rd one.
+  await img.view.loadPromise;
+  const shown = img.view.image!;
+  const px = new Uint8Array(shown.width * shown.height * 4);
+  shown.copyTo(px);
+  const last = 0x101010 * 12;
+  expect([px[0], px[1], px[2]]).toEqual([(last >> 16) & 255, (last >> 8) & 255, last & 255]);
+  img.present(cv); // identical frame: skipped, not dropped
+  expect(img.dropped ?? 0).toBe(0);
+  img.dispose();
+  renderer.destroy();
+});

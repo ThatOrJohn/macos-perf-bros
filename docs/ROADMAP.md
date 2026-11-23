@@ -316,7 +316,9 @@ Measured with `bun run demo` in the Claude terminal panel: process CPU over 60 s
 | | Before | After |
 |---|---|---|
 | blocks | 17.6% | 5.3% |
-| kitty | 18.9% | 5.9% |
+| kitty | 18.9% | ~~5.9%~~ invalid; see below |
+
+**Correction (Kitty):** the 5.9% figure was measured while the Kitty presenter was frozen. It leaked pool handles, so it stopped sending frames after the third. With that fixed, Kitty also needed zlib transport, and static backdrops are now cached (`src/engine/stamp.ts`). Measured in a pty at 5 fps idle: blocks about 6%, Kitty about 9–10% (pre-scale ×2: 9.9%, ×1: 8.6%, ×3: 12.4%). Kitty is still over the 5% budget. The remaining cost is per-frame drawing of the overworld's outlined structures, paths and cloud blobs, much of which is static and could be cached by splitting each structure into static and metric-driven layers.
 
 **Budget:** the maintainer accepted ~5% at 5 fps idle (2026-11-23). The original 3% target would have needed about 2 fps idle, since a bare OpenTUI app costs about 1.0% fixed plus 0.26% per fps. AGENTS.md rule 7 and DESIGN.md now say 5%.
 

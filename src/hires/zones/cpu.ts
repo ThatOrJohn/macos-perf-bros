@@ -10,6 +10,7 @@ import { P } from "../../engine/palette.ts";
 import { bevel, bricks, glow, outlined, type BrickStyle } from "../../engine/paint.ts";
 import { fmtPct, hash, type DrawCtx } from "../../world/common.ts";
 import type { CoreKind } from "../../core/snapshot.ts";
+import { stamped } from "../../engine/stamp.ts";
 import { FLAME, W, X, drawHintHi, drawHudHi, drawMountains, drawNightSky } from "../common.ts";
 
 const FLOOR = 150;
@@ -25,7 +26,11 @@ const BACK_WALL: BrickStyle = { base: 0x2f3142, light: 0x3c3f55, dark: 0x25273a,
 function courtyard(cv: PixelCanvas, t: number): void {
   drawNightSky(cv, 11, FLOOR, t);
   drawMountains(cv, FLOOR - 30, 40, 22, 2.1);
-  // floor flagstones
+  // floor flagstones (static: cached after the first draw)
+  stamped(cv, "cpu.floor", floor);
+}
+
+function floor(cv: PixelCanvas): void {
   for (let y = FLOOR; y < 181; y++) {
     for (let x = 0; x < W; x++) {
       const row = Math.floor((y - FLOOR) / 8);
@@ -41,6 +46,10 @@ function courtyard(cv: PixelCanvas, t: number): void {
 }
 
 function backWall(cv: PixelCanvas, x0: number, x1: number): void {
+  stamped(cv, `cpu.wall:${x0},${x1}`, (l) => backWallRaw(l, x0, x1));
+}
+
+function backWallRaw(cv: PixelCanvas, x0: number, x1: number): void {
   outlined(cv, X.outline, (l) => {
     bricks(l, x0, WALL_TOP, x1 - x0, FLOOR - WALL_TOP, BACK_WALL, 10, 5, x0);
     for (let x = x0; x < x1; x += 10) bevel(l, x, WALL_TOP - 6, 6, 6, BACK_WALL.base, BACK_WALL.light, BACK_WALL.dark);
