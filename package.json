@@ -6,10 +6,15 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "bench:parse": "bun run scripts/bench-parse.ts"
+    "bench:parse": "bun run scripts/bench-parse.ts",
+    "demo": "bun run src/main.ts",
+    "stills": "bun run src/main.ts --png docs/stills"
   },
   "devDependencies": {
     "@types/bun": "^1.4.5",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.9.8"
   }
 }
