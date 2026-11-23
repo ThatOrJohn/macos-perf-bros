@@ -24,12 +24,13 @@ export class Recorder {
   }
 }
 
-export async function loadNdjsonReplay(path: string): Promise<SnapshotSource> {
+export async function loadNdjsonReplay(path: string): Promise<SnapshotSource & { sampleCount: number }> {
   const text = await Bun.file(path).text();
   const snaps: Snapshot[] = text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as Snapshot);
   if (!snaps.length) throw new Error(`${path}: no snapshots`);
   const t0 = snaps[0]!.t;
   return {
+    sampleCount: snaps.length,
     at(tS: number): Snapshot {
       const s = snaps[Math.floor(Math.max(0, tS)) % snaps.length]!;
       // keep time moving forward across loops so uptime/animations stay sane
