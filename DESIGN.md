@@ -105,6 +105,8 @@ If spawning shell commands costs too much or proves brittle (for example `vm_sta
 
 ## 6. Snapshot schema (sketch)
 
+> The source of truth is now [`src/core/snapshot.ts`](src/core/snapshot.ts). Units downstream of collectors: percent 0–100, MHz, watts, bytes/s.
+
 ```ts
 interface Snapshot {
   t: number;                       // ms epoch
