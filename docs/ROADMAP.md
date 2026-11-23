@@ -109,28 +109,118 @@ Good first tasks for an agent: R1, R2, R8. The zone tasks (R3–R6) are the main
 
 ## R4. Network Sky
 
-**Goal:** Replace the placeholder with the Network Sky level.
+**Goal:** Replace the placeholder with the Network Sky level: system-wide traffic as packet streaks crossing a night sky, the busiest network processes as clouds, and a 60-second throughput history.
 
-**Files:** new `src/hires/zones/network.ts` and `src/world/zones/network.ts`, routing, stills.
+**Depends on:** R2 (merged), for `drawLockedPanel` / `drawLockedPanelHi` and `zoneLocked`. Read `src/world/process-field.ts` and both `zones/process.ts` first: they show the expected patterns for PID-stable slots, scene state owned by `Game`, two-pass labels, and the metric comment block.
 
-**Data:**
-- `snap.net`: `rxBps`, `txBps`, `rxPps`, `txPps` (system-wide; undefined without sudo → R2 locked panel).
-- Per-process: `snap.procs[].netRxBps` and `netTxBps`.
-- There is **no per-connection data yet**. Don't add `nettop`; that's a separate future task.
+### Files
 
-**Metaphor:** an open night sky above a cloud layer.
-
-| Visual | Metric |
+| File | Change |
 |---|---|
-| Packet streaks crossing right → left (green, `P.ok`), reuse the overworld streak style | Inbound: count ∝ log rx bytes/s, speed ∝ log rx packets/s |
-| Streaks crossing left → right (gold, `P.accent`) | Outbound: same, for tx |
-| One cloud each for the top 5 network processes by `netRxBps + netTxBps`; size ∝ log rate; name label under it; a small up/down arrow pair with values | Per-process network |
-| Radio mast on the right with beacon blink rate | Total packets/s |
-| Throughput sparkline along the bottom: last 60 s rx/tx as two thin dithered lines | Recent rx/tx history, kept in a scene-local ring buffer fed from `ctx.snap` each second |
+| `src/world/zones/network.ts`, `src/hires/zones/network.ts` | New scenes (`drawNetworkZone`, `drawNetworkZoneHi`). |
+| `src/world/net-sky.ts` | Shared, renderer-agnostic state: the history ring buffer and the cloud slot tracker (see below). Like `process-field.ts`. |
+| `src/hires/common.ts` | Extract the cloud drawing from `cloudIsland()` in `src/hires/overworld.ts` into a reusable `drawCloudHi(cv, cx, cy, scale)`. **The overworld stills must stay byte-identical** after the extraction. |
+| `src/world/game.ts` | Route `case "net"` in `draw` and `drawHi`; own one state object per renderer, as `processField` / `processFieldHi` do. |
+| `src/main.ts` | Add `{ name: "8-network", keys: ["3"], t: 8.5 }` to the default stills. |
+| `scripts/make-scenarios.ts` | Extend `net-burst` (see Data). |
+| `test/` | See Tests. |
+| `DESIGN.md` §7.3 | Replace the Network Sky bullets with what you built. |
 
-- Title `NETWORK SKY`. Hint right: `↓ IN  ↑ OUT  (LOG SCALE)`.
+### Data
 
-**Acceptance:** `net-burst` vs. `idle` stills differ clearly; `degraded` shows the locked panel.
+- `snap.net`: `rxBps`, `txBps` (bytes/s), `rxPps`, `txPps` (packets/s). System-wide, from powermetrics. **Undefined without sudo.**
+- Per-process: `snap.procs[].netRxBps`, `netTxBps` (bytes/s). They come from powermetrics `tasks[]` and are **0 without sudo**.
+- No per-connection data and no remote hosts. Don't add `nettop`, `lsof` or any new collector; that's a future task. DESIGN.md's "process + remote host" clouds are out of scope.
+- Scenarios:
+  - `idle` has **all-zero** network traffic, so the empty sky must look deliberate.
+  - `net-burst` peaks at 80 MB/s rx, 5 MB/s tx, but only 3 processes have traffic. Extend it so **6** processes have nonzero traffic, including at least one that is tx-heavy (tx > rx) and one under 10 KB/s. Then regenerate the scenarios and keep `test/scenarios.test.ts` passing.
+  - The bundled M1 capture (`bun run demo`) has small real values, around 9 KB/s.
+
+### Locked
+
+When `zoneLocked("net", snap)` is true, draw the scene backdrop plus `drawLockedPanel(f)` / `drawLockedPanelHi(cv)`, then the HUD and hint, and **nothing else**: no streaks, clouds or history. Model it on `drawPlaceholderZone(…, locked = true)`.
+
+### Metric → visual mapping
+
+Use one log scale everywhere so the scene and the overworld tile agree: **`lvl(bps) = clamp(log10(1 + bps) / 7, 0, 1)`**, which reaches full at 10 MB/s. This matches `cloudIsland()` / `netTile()`. For packets: **`plvl(pps) = clamp(log10(1 + pps) / 5, 0, 1)`**, full at 100 k pps.
+
+| Visual | Metric | Mapping |
+|---|---|---|
+| Green (`P.ok`) streaks crossing **right → left** in the upper sky lanes | Inbound bytes/s | count = `round(lvl(rxBps) × N)` (N = 14 hi-res, 6 low-res), at most N |
+| Gold (`P.accent`) streaks crossing **left → right** in the lower sky lanes | Outbound bytes/s | count = `round(lvl(txBps) × N)` |
+| Streak speed | Packets/s, per direction | px/s = base × (1 + 2 × `plvl(pps)`). Hi-res base 60, low-res base 18. |
+| Up to 5 clouds (4 low-res), one per busiest network process | `netRxBps + netTxBps`, ranked descending, only rate > 0 | Cloud scale = 0.6 + 0.6 × `lvl(rate)`. Name under it, plus `↓rx ↑tx`. |
+| Rain from a cloud, fine dithered `P.ok` drops | That process's rx share | Drop count ∝ `lvl(netRxBps)`. Optional; skip if it clutters. |
+| Radio mast on the right, beacon blink | Total packets/s (rx + tx) | Blink Hz = 0.5 + 3 × `plvl(rxPps + txPps)`. Label `PKT/S` with the value under the mast. |
+| Sparkline band along the bottom | Last 60 s of rx and tx | Two 1-px lines, green rx and gold tx, y ∝ `lvl()`. Axis label `60S`, and the current values at the right end. |
+
+**Readable numbers (hard rule 1):** the header shows `↓ <rx>/S  ↑ <tx>/S` using `fmtBytes`. Each cloud shows its name and rates. The mast shows packets/s. The sparkline shows the current values.
+
+**No traffic:** when rx and tx are both 0, draw no streaks and no clouds, and show `NO TRAFFIC` centered in `P.dim` in the cloud band. The sparkline sits flat on its baseline. Stars still twinkle, since they're backdrop, not data.
+
+### State (`src/world/net-sky.ts`)
+
+- **History:** a fixed 60-entry ring buffer of `{ rx, tx }`, allocated once. Push one sample each time `floor(snap.t / 1000)` changes, not per frame, so 30 fps doesn't record 30 entries a second. Frames must stay deterministic for a given sequence of `(snapshot, t)`. Note that the default stills settle on a single sample (flat history), while scenario stills replay from t=0 (`replayTimeline`), so the history fills.
+- **Clouds:** stable horizontal slots keyed by PID, so clouds don't swap places when the ranking changes. Use the same idea as `ProcessField`: probe from `hash(pid, …)`, a smoothed `presence` to grow in and shrink out, and a `Smoother` per entity. If you can extract a small generic slot tracker from `ProcessField` without changing Process Plains' behavior or stills, do that; otherwise write a focused one. **Don't copy-paste `ProcessField` and edit it.**
+- No `Math.random()`. Streak positions derive from `t`, the index and `hash()`, like `cloudIsland()`.
+
+### Layout (respect the bands in docs/ART_DIRECTION.md)
+
+**Hi-res, 320×192:**
+
+| Band | y | Contents |
+|---|---|---|
+| HUD | 0–10 | `drawHudHi` |
+| Title | 14 | `NETWORK SKY` centered. Header totals at y 24, centered, in `P.white` with shadow. |
+| Inbound lanes | 34–62 | 4 lanes, 7 px apart |
+| Cloud band | 66–128 | 5 slots across x 8–276. Name and rates take ~2 text lines under each cloud. **Clouds and labels must not overlap a neighbor's.** Draw all clouds first, then all labels (two-pass, as in Process Plains). |
+| Outbound lanes | 132–150 | 3 lanes. Streaks pass *in front of* the cloud band edges but never over text. |
+| Sparkline | 154–178 | Dark `P.hudBg` panel with `P.stoneDeep` bevel, x 4–315 |
+| Mast | x 284–314, y 40–150 | Lattice in `P.metal`/`P.metalLight` like `cloudIsland`; beacon `P.crit`/`P.ember`; `PKT/S` and value at y ~120–138 with a dark backing |
+| Hint | 181–191 | Left `ESC BACK  Q QUIT`, right `↓ IN  ↑ OUT  LOG SCALE` |
+
+Names: show **at least 8 characters** in hi-res (5×7 font, 6 px advance). Six characters, as R3's leaderboard used, is too short to read. Use `processName()` from `process-field.ts` for sanitizing and truncation.
+
+**Low-res, 80×46 canvas + 80×24 text:** streak lanes at canvas y 4–12 (in) and 30–33 (out); clouds at y 14–28 with names and rates as text on rows 15–16 (`f.centered`); sparkline at canvas y 36–43 with values in text row 22; mast on the right at x 74–78. Up to 4 clouds. Title on text row 1, totals on row 2.
+
+### Art
+
+- Reuse, don't redraw:
+  - Clouds: hi-res via the extracted `drawCloudHi`, which outlines in `X.cloudOutline`, has a dithered `P.cloudShade` underside and light from the top-left. Low-res via `drawCloud` in `src/world/common.ts`.
+  - Streaks: the overworld streak style, with a bright head and a Bayer-faded tail.
+  - Mast: the `cloudIsland` mast.
+- Clouds are **plain clouds. No faces, eyes, riders or anything sitting on a cloud.** Faces on clouds read as a reference to existing games (AGENTS.md rule 3).
+- Palette only from `P` and `X`. No smooth gradients; dither instead.
+
+### Performance
+
+`bun run bench:render` has `net` under 2 ms hi-res and 0.5 ms low-res. Use no full-canvas allocation per frame. Cap the streak count as in the table.
+
+### Tests
+
+- In `test/present.test.ts`, `net` renders in both renderers for idle, `net-burst`, `degraded` and an empty snapshot (`procs: []`, `net` all-zero). Most of this is already covered by the scenario loop; confirm that it really reaches the new scene.
+- In a new `test/net-sky.test.ts`:
+  - The ring buffer records one entry per second regardless of frame rate, wraps at 60, and starts flat.
+  - Cloud slots stay put by PID when ranks swap.
+  - Processes with zero traffic get no cloud.
+  - With `degraded`, the low-res frame text contains `NEEDS SUDO` and no `↓`.
+  - With `idle`, it contains `NO TRAFFIC`.
+- The overworld stills are byte-identical before and after the `drawCloudHi` extraction. Check with `git diff --stat docs/stills/*overworld*`.
+
+### Acceptance
+
+- `net-burst` and `idle` stills differ clearly in both renderers: streak density, clouds and the sparkline.
+- `degraded` shows the locked panel and nothing data-driven.
+- With 5–6 active processes, no text overlaps at 320×192 or 80×46. **Check the `net-burst` hi-res still for this specifically.**
+- All the overworld and other-zone stills are unchanged.
+- The PR description includes the idle, `net-burst` and degraded stills in both renderers, plus the bench line for `net`.
+
+### Out of scope
+
+- Per-connection data, `nettop` and remote hosts.
+- Changing the overworld net tile.
+- Interface selection (Wi-Fi vs. Ethernet).
+- Any new key bindings.
 
 ---
 
