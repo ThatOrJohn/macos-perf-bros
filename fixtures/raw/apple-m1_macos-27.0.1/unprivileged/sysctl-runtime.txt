@@ -1,0 +1,6 @@
+vm.swapusage: total = 15360.00M  used = 14084.12M  free = 1275.88M  (encrypted)
+vm.loadavg: { 3.52 4.34 4.64 }
+kern.boottime: { sec = 1795181477, usec = 304595 } Fri Nov 20 07:31:17 2026
+kern.memorystatus_vm_pressure_level: 2
+hw.pagesize: 16384
+vm.page_free_count: 4128

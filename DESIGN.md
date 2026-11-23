@@ -89,7 +89,7 @@ Optional later: document a sudoers entry scoped to `/usr/bin/powermetrics` with 
 | Process detail | `ps`, `lsof -p` | no | On demand |
 | Uptime, load | `sysctl kern.boottime`, `vm.loadavg` | no | |
 
-> Exact `powermetrics` plist key names vary by macOS version and chip. Phase 1 starts by capturing real output on the dev machine and checking it into `fixtures/` before the parser is written.
+> `powermetrics` plist key names vary by macOS version and chip. The verified paths, units and gotchas for M1 on macOS 27 are in [`fixtures/README.md`](fixtures/README.md). Notable: `gpu.freq_hz` is really MHz, power is in mW, `tasks[]` has no RSS or GPU time, and `battery.percent_charge` is 0 (not missing) on Macs without a battery.
 
 Base command:
 
@@ -280,6 +280,6 @@ fixtures/          raw powermetrics captures, synthetic .ndjson scenarios
 
 - What's the right top-N process count for the plains before it gets visually noisy (20? 30?)?
 - Is `nettop` reliable and cheap enough at 1 Hz, or should per-connection data be sampled only while you're in Network Sky?
-- How do we show per-process GPU usage, which `powermetrics` doesn't give cleanly?
+- ~~How do we show per-process GPU usage?~~ powermetrics doesn't provide it, even with `--show-process-gpu` (see fixtures/README). Out of scope unless an IOKit source turns up.
 - What's the art direction: palette size, and whether to have a recognizable "player" character as the app's mascot?
 - How should distribution work (`bun build --compile` single binary, Homebrew tap)?

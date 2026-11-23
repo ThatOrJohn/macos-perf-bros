@@ -1,0 +1,40 @@
+  PID  PPID USER              %CPU    RSS COMM
+91613     1 user              91.9  40304 /usr/libexec/duetexpertd
+  511     1 _windowserver     24.0 107568 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  762     1 root              18.6  19088 app-62
+10331  8412 user              11.2  24064 app-66
+38422 38388 user               9.7  50976 app-06
+ 9772     1 user               7.9  29392 app-61
+98400     1 user               6.5 646912 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  680     1 user               5.7   3616 /usr/sbin/cfprefsd
+38456 38388 user               5.4 476656 app-07
+13495     1 user               4.9 500608 app-27
+  901     1 user               4.4  46000 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+  443     1 root               3.0   3696 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+12769     1 _trustd            2.4  10512 /usr/libexec/trustd
+95603   781 user               2.3  84656 app-21
+  611     1 root               1.9  11280 /usr/libexec/syspolicyd
+  805     1 _coreaudiod        1.7  19232 /usr/sbin/coreaudiod
+12794     1 user               1.4  10848 /usr/libexec/trustd
+ 8392     1 user               1.4  24960 ControlCenter
+  512     1 root               1.2  11376 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd
+  468     1 root               1.1  17584 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  666     1 _driverkit         1.0  33760 /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN
+  900     1 user               0.9  35200 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  785     1 user               0.9 266448 /System/Applications/Podcasts.app/Contents/MacOS/Podcasts
+  438     1 root               0.7  16368 /usr/libexec/logd
+ 8372     1 user               0.7  54608 app-64
+  505     1 root               0.6   3392 /usr/sbin/notifyd
+37931     1 user               0.6 140848 app-01
+  482     1 root               0.6   6096 /System/Library/CoreServices/launchservicesd
+  516     1 root               0.5  17072 /usr/libexec/runningboardd
+  614     1 _mds_stores        0.5  35776 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+  514     1 root               0.5   3040 /usr/sbin/cfprefsd
+22663     1 user               0.4  30048 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+    1     0 root               0.4  15232 /sbin/launchd
+38388     1 user               0.4 238896 app-05
+44077     1 user               0.4  13744 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+ 5915   779 user               0.3  26640 app-09
+  550     1 _analyticsd        0.3   6896 /System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsd
+  556     1 root               0.2   2048 /usr/libexec/clocksyncd
+38513 38496 user               0.2  41952 app-42

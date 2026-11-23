@@ -1,0 +1,11 @@
+hw.model: Macmini9,1
+hw.memsize: 17179869184
+hw.ncpu: 8
+hw.nperflevels: 2
+machdep.cpu.brand_string: Apple M1
+hw.perflevel0.name: Performance
+hw.perflevel0.logicalcpu: 4
+hw.perflevel0.physicalcpu: 4
+hw.perflevel1.name: Efficiency
+hw.perflevel1.logicalcpu: 4
+hw.perflevel1.physicalcpu: 4
