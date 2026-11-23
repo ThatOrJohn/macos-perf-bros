@@ -5,6 +5,7 @@
 import { PixelCanvas, mix, sprite, type Color, type Sprite } from "../engine/canvas.ts";
 import { drawText, drawTextCentered, drawTextRight, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
+import { stamped } from "../engine/stamp.ts";
 import { bayer, bevel, blitOutlined, disc, dither, ditherGradientV, glow, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { HUD_PRI, cpuTotalPct, fitByPriority, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
@@ -353,6 +354,7 @@ export function drawNightSky(cv: PixelCanvas, y0: number, y1: number, t: number,
     }
   }
   if (moon) {
+    // Not cached: glow() blends over the twinkling stars, and it's cheap.
     const mx = 26;
     const my = y0 + 14;
     glow(cv, mx, my, 16, X.moon, 0.35);
@@ -363,7 +365,12 @@ export function drawNightSky(cv: PixelCanvas, y0: number, y1: number, t: number,
 }
 
 /** Mountain silhouettes: far range with snowcaps, near range darker. */
+/** Static, so cached after the first draw (see stamp.ts). */
 export function drawMountains(cv: PixelCanvas, baseY: number, farH: number, nearH: number, seed = 0): void {
+  stamped(cv, `mtn:${baseY},${farH},${nearH},${seed}`, (l) => drawMountainsRaw(l, baseY, farH, nearH, seed));
+}
+
+function drawMountainsRaw(cv: PixelCanvas, baseY: number, farH: number, nearH: number, seed: number): void {
   const far = (x: number) =>
     baseY - farH * (0.55 + 0.45 * Math.abs(Math.sin(x * 0.021 + seed))) + Math.sin(x * 0.11 + seed) * 3;
   for (let x = 0; x < W; x++) {
@@ -383,7 +390,12 @@ export function drawMountains(cv: PixelCanvas, baseY: number, farH: number, near
 }
 
 /** Textured grass field with tufts and the odd flower. */
+/** Static, so cached after the first draw (see stamp.ts). */
 export function drawGrassField(cv: PixelCanvas, y0: number, y1: number): void {
+  stamped(cv, `grass:${y0},${y1}`, (l) => drawGrassFieldRaw(l, y0, y1));
+}
+
+function drawGrassFieldRaw(cv: PixelCanvas, y0: number, y1: number): void {
   for (let y = y0; y < y1; y++) {
     for (let x = 0; x < W; x++) {
       const h = hash(x >> 1, y >> 1, 11);

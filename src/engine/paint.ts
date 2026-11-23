@@ -2,6 +2,7 @@
  * Pixel-art painting helpers for the hi-res renderer: ordered dithering,
  * bevelled shapes, brick/plank textures, circles, and automatic ink outlines.
  */
+import { stamped } from "./stamp.ts";
 import { PixelCanvas, mix, type Color, type Sprite } from "./canvas.ts";
 
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
@@ -13,7 +14,12 @@ export const bayer = (x: number, y: number) => BAYER4[(y & 3) * 4 + (x & 3)]!;
 export const dither = (x: number, y: number, a: Color, b: Color, t: number): Color => (t > bayer(x, y) ? b : a);
 
 /** NES-style banded gradient: stops are discrete colors, blended only by ordered dither. */
+/** Static, so cached after the first draw (see stamp.ts). */
 export function ditherGradientV(cv: PixelCanvas, x: number, y0: number, w: number, y1: number, stops: Color[]): void {
+  stamped(cv, `dgv:${x},${y0},${w},${y1},${stops.join(",")}`, (target) => ditherGradientVRaw(target, x, y0, w, y1, stops));
+}
+
+function ditherGradientVRaw(cv: PixelCanvas, x: number, y0: number, w: number, y1: number, stops: Color[]): void {
   const n = stops.length - 1;
   for (let y = y0; y < y1; y++) {
     const t = ((y - y0) / Math.max(1, y1 - y0 - 1)) * n;

@@ -165,12 +165,17 @@ function cleanup(): void {
   image?.dispose();
 }
 // Every exit path (q, Ctrl-C, signals) ends up in renderer.destroy() → onDestroy.
+// OpenTUI restores the terminal asynchronously; its docs ask to await
+// `renderer.closed` before process.exit().
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
   targetFps: ACTIVE_FPS,
+  // Pixel art compresses extremely well: zlib (Kitty o=z) cut a pre-scaled
+  // frame from ~1 MB of base64 RGB to a few KB. PB_KITTY_TRANSPORT overrides it for measuring.
+  kittyImageTransport: (process.env.PB_KITTY_TRANSPORT as "raw" | "zlib" | "file" | undefined) ?? "zlib",
   onDestroy: () => {
     cleanup();
-    process.exit(0);
+    void renderer.closed.finally(() => process.exit(0));
   },
 });
 const blocks = new PixelView(renderer);

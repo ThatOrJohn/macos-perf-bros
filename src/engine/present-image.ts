@@ -21,6 +21,9 @@ export class ImagePresenter {
   private buf?: Uint8Array;
   private scale = 0;
   private dims = "";
+  /** Frames handed to the view, and frames the pool had no free slot for. */
+  published = 0;
+  dropped = 0;
   /** Last published canvas; identical frames are not re-sent to the terminal. */
   private last = new Int32Array(0);
 
@@ -78,8 +81,18 @@ export class ImagePresenter {
       }
       for (let i = 1; i < k; i++) buf.copyWithin(rowStart + i * W * 4, rowStart, rowStart + W * 4);
     }
+    // publishRgba returns a retained handle, and a pool image stays busy while
+    // any handle is alive. The view retains its own reference, so release ours
+    // now; otherwise all `capacity` images stay busy, publish returns null from
+    // the 4th frame on, and the picture freezes.
     const img = this.pool!.publishRgba(buf);
-    if (img) this.view.source = img;
+    if (!img) {
+      this.dropped++;
+      return;
+    }
+    this.view.source = img;
+    img.dispose();
+    this.published++;
   }
 
   dispose(): void {
