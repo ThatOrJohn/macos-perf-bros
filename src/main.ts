@@ -1,8 +1,11 @@
 /**
  * perf-bros entry point.
  *
- *   bun run demo                          # play the bundled M1 fixtures in the terminal
- *   bun run src/main.ts --replay DIR      # a different fixture capture
+ *   bun start                             # live: this Mac (asks for sudo for powermetrics)
+ *   bun start -- --no-sudo                # live, degraded mode (no GPU/power/thermal/freqs)
+ *   bun start -- --record s.ndjson        # live, and record merged snapshots
+ *   bun run demo                          # replay the bundled M1 fixtures
+ *   bun run src/main.ts --replay PATH     # replay a fixture dir or a recorded .ndjson
  *   bun run src/main.ts --renderer kitty  # force a renderer: auto | kitty | sixel | blocks
  *   bun run src/main.ts --scale 3         # fixed pre-scale for pixel-image renderers
  *   bun run src/main.ts --png OUTDIR      # render review stills instead of running
@@ -11,14 +14,14 @@
  *   kitty / sixel  320×192 hi-res art drawn as a real pixel image
  *   blocks         80×46 art drawn with half-block characters (works everywhere)
  * "auto" picks kitty when the terminal supports the Kitty graphics protocol.
- *
- * Live collection (sudo powermetrics) isn't wired up yet; this drives the UI
- * from fixture replay so the graphics can be reviewed.
  */
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { startLive, type SnapshotSource } from "./core/live.ts";
+import { ensureSudo } from "./core/privilege.ts";
+import { Recorder, loadNdjsonReplay } from "./core/recorder.ts";
 import { loadFixtureReplay } from "./core/replay.ts";
 import { ImagePresenter } from "./engine/present-image.ts";
 import { PixelView } from "./engine/present-opentui.ts";
@@ -29,19 +32,34 @@ type Mode = "kitty" | "sixel" | "blocks";
 
 const { values: args } = parseArgs({
   options: {
-    replay: { type: "string", default: "fixtures/raw/apple-m1_macos-27.0.1" },
+    replay: { type: "string" },
+    record: { type: "string" },
+    "no-sudo": { type: "boolean", default: false },
     png: { type: "string" },
     renderer: { type: "string", default: "auto" },
     scale: { type: "string" },
   },
 });
 
-const source = await loadFixtureReplay(args.replay!);
+const FIXTURE = "fixtures/raw/apple-m1_macos-27.0.1";
 
 if (args.png) {
-  await renderStills(args.png);
+  await renderStills(args.png, await loadFixtureReplay(args.replay ?? FIXTURE));
   process.exit(0);
 }
+
+async function openSource(): Promise<SnapshotSource> {
+  if (args.replay) {
+    return args.replay.endsWith(".ndjson") ? loadNdjsonReplay(args.replay) : loadFixtureReplay(args.replay);
+  }
+  // Validate sudo before the TUI owns the terminal, so the prompt is a normal one.
+  const privileged = !args["no-sudo"] && ensureSudo({ interactive: !!process.stdin.isTTY, log: (m) => console.error(m) });
+  if (!privileged) console.error("Continuing without sudo: GPU, power, thermal and CPU frequencies will be unavailable.");
+  return startLive({ privileged });
+}
+
+const source = await openSource();
+const recorder = args.record ? new Recorder(args.record, source) : undefined;
 
 /** Environment hints for terminals known to speak the Kitty graphics protocol. */
 function envSaysKitty(): boolean {
@@ -58,7 +76,23 @@ function detectMode(r: CliRenderer): Mode | undefined {
 }
 
 const game = new Game();
-const renderer = await createCliRenderer({ exitOnCtrlC: true, targetFps: 30 });
+let cleaned = false;
+function cleanup(): void {
+  if (cleaned) return;
+  cleaned = true;
+  recorder?.stop();
+  source.stop();
+  image?.dispose();
+}
+// Every exit path (q, Ctrl-C, signals) ends up in renderer.destroy() → onDestroy.
+const renderer = await createCliRenderer({
+  exitOnCtrlC: true,
+  targetFps: 30,
+  onDestroy: () => {
+    cleanup();
+    process.exit(0);
+  },
+});
 const blocks = new PixelView(renderer);
 const image = new ImagePresenter(renderer, { scale: args.scale ? Number(args.scale) : undefined });
 renderer.root.add(blocks);
@@ -92,11 +126,7 @@ renderer.setFrameCallback(async () => {
 });
 
 renderer.keyInput.on("keypress", (key) => {
-  if (game.key(key.name) === "quit") {
-    image.dispose();
-    renderer.destroy();
-    process.exit(0);
-  }
+  if (game.key(key.name) === "quit") renderer.destroy();
   // r: cycle renderer (handy for comparing)
   if (key.name === "r") applyMode(mode === "blocks" ? "kitty" : "blocks");
 });
@@ -105,7 +135,7 @@ renderer.start();
 
 // ---------------------------------------------------------------- stills
 
-async function renderStills(outDir: string): Promise<void> {
+async function renderStills(outDir: string, source: SnapshotSource): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: { name: string; keys: string[]; t: number }[] = [
     { name: "1-overworld-idle", keys: [], t: 2.5 },

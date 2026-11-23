@@ -6,11 +6,10 @@
 import { join } from "node:path";
 import { memoryReading, parsePressureLevel, parseSwapUsage, parseSysctl, parseVmStat } from "../collectors/memory.ts";
 import { parseCapture } from "../collectors/powermetrics.ts";
+import type { SnapshotSource } from "./live.ts";
 import type { MemoryReading, PowermetricsReading, Snapshot, Topology } from "./snapshot.ts";
 
-export interface ReplaySource {
-  /** Snapshot for elapsed demo time (seconds). Advances one sample per second. */
-  at(tS: number): Snapshot;
+export interface ReplaySource extends SnapshotSource {
   topology: Topology;
 }
 
@@ -50,6 +49,7 @@ export async function loadFixtureReplay(dir: string): Promise<ReplaySource> {
   const first = loop[0]!;
   return {
     topology,
+    stop() {},
     at(tS: number): Snapshot {
       const r = loop[Math.floor(Math.max(0, tS)) % loop.length]!;
       return {

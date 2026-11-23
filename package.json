@@ -7,8 +7,10 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "bench:parse": "bun run scripts/bench-parse.ts",
-    "demo": "bun run src/main.ts",
-    "stills": "bun run src/main.ts --png docs/stills"
+    "demo": "bun run src/main.ts --replay fixtures/raw/apple-m1_macos-27.0.1",
+    "stills": "bun run src/main.ts --png docs/stills",
+    "start": "bun run src/main.ts",
+    "bench:render": "bun run scripts/bench-render.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.5",
