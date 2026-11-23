@@ -324,6 +324,5 @@ Report the before/after numbers in the PR.
 - **Entity focus and detail cards** (phase 6, DESIGN.md §7.4): `Tab` focus inside zones, an `Enter` detail card, and on-demand `lsof`/`ps` detail collectors.
 - **Per-connection network** via `nettop`: the cost at 1 Hz is an open question (DESIGN.md §14).
 - **Disk volumes** (`df`) as mine shafts.
-- **Sudoers documentation** for passwordless `powermetrics`.
 - **Distribution:** `bun build --compile` and a Homebrew tap.
 - **Action broker / stomp mechanic** (phase 7).

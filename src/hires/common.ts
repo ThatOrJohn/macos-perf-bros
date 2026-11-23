@@ -7,7 +7,7 @@ import { drawText, drawTextCentered, drawTextRight, textWidth } from "../engine/
 import { P } from "../engine/palette.ts";
 import { bayer, bevel, blitOutlined, disc, ditherGradientV, glow, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
-import { cpuTotalPct, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
+import { HUD_PRI, cpuTotalPct, fitByPriority, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
 
 export const W = 320;
 export const H = 192;
@@ -215,6 +215,7 @@ export const BANNER: Sprite[] = [0, 1, 2].map((f) => {
 const ico = (rows: string[], c: Color) => sprite(rows, { "#": c });
 export const ICON = {
   cpu: ico([".#.#.#.", "#######", "##...##", "##...##", "##...##", "#######", ".#.#.#."], P.eBrickLight),
+  gpu: ico(["#######", "#.....#", "#.###.#", "#.###.#", "#.....#", "#######", "..###.."], P.compressedLight), // a screen
   mem: ico(["...#...", "..###..", ".#####.", ".#####.", "#######", "#######", ".#####."], P.appLight),
   net: ico(["...#...", ".#.#.#.", "#..#..#", "...#...", "..###..", ".#.#.#.", "#..#..#"], P.ok),
   bolt: ico(["...###.", "..###..", ".###...", "######.", "..###..", ".###...", "##....."], P.accent),
@@ -230,32 +231,37 @@ export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
   cv.hline(0, W - 1, HUD_H - 1, P.stoneDeep);
   const cpu = cpuTotalPct(snap);
   const mem = snap.memory;
-  const items: { icon: Sprite; text: string; color: Color }[] = [
-    { icon: ICON.cpu, text: fmtPct(cpu), color: cpu > 85 ? P.crit : cpu > 60 ? P.warn : P.hudFg },
+  type Item = { icon?: Sprite; text: string; color: Color; pri: number; right?: boolean };
+  const items: Item[] = [
+    { icon: ICON.cpu, text: fmtPct(cpu), color: cpu > 85 ? P.crit : cpu > 60 ? P.warn : P.hudFg, pri: HUD_PRI.cpu },
   ];
-  if (mem) items.push({ icon: ICON.mem, text: `${fmtBytes(mem.usedB)}/${fmtBytes(mem.totalB, 0)}`, color: pressureColor(mem.pressure) });
-  if (snap.net) items.push({ icon: ICON.net, text: `↓${fmtBytes(snap.net.rxBps, 0)}↑${fmtBytes(snap.net.txBps, 0)}`, color: P.hudFg });
-  if (snap.power) items.push({ icon: ICON.bolt, text: `${snap.power.packageW.toFixed(1)}W`, color: P.hudFg });
-  if (snap.thermal) items.push({ icon: ICON.temp, text: snap.thermal.toUpperCase(), color: thermalColor(snap.thermal) });
+  // GPU busy % (powermetrics only), same thresholds as CPU.
+  const gpu = snap.gpu?.activePct;
+  if (gpu !== undefined) items.push({ icon: ICON.gpu, text: fmtPct(gpu), color: gpu > 85 ? P.crit : gpu > 60 ? P.warn : P.hudFg, pri: HUD_PRI.gpu });
+  if (mem) items.push({ icon: ICON.mem, text: `${fmtBytes(mem.usedB)}/${fmtBytes(mem.totalB, 0)}`, color: pressureColor(mem.pressure), pri: HUD_PRI.mem });
+  if (snap.net) items.push({ icon: ICON.net, text: `↓${fmtBytes(snap.net.rxBps, 0)}↑${fmtBytes(snap.net.txBps, 0)}`, color: P.hudFg, pri: HUD_PRI.net });
+  if (snap.power) items.push({ icon: ICON.bolt, text: `${snap.power.packageW.toFixed(1)}W`, color: P.hudFg, pri: HUD_PRI.power });
+  if (snap.thermal) items.push({ icon: ICON.temp, text: snap.thermal.toUpperCase(), color: thermalColor(snap.thermal), pri: HUD_PRI.thermal });
   items.push(snap.battery
-    ? { icon: ICON.heart, text: `${Math.round(snap.battery.pct)}%`, color: P.hudFg }
-    : { icon: ICON.plug, text: "AC", color: P.hudFg });
+    ? { icon: ICON.heart, text: `${Math.round(snap.battery.pct)}%`, color: P.hudFg, pri: HUD_PRI.battery }
+    : { icon: ICON.plug, text: "AC", color: P.hudFg, pri: HUD_PRI.battery });
+  // Right-aligned: NO SUDO tag (without sudo) and uptime.
+  if (!snap.privileged) items.push({ text: "NO SUDO", color: P.warn, pri: HUD_PRI.nosudo, right: true });
+  items.push({ text: fmtUptime(snap.uptimeS), color: P.dim, pri: HUD_PRI.uptime, right: true });
 
-  const up = fmtUptime(snap.uptimeS);
-  // Without sudo, a NO SUDO tag sits before the uptime; the left items yield to it.
-  const tag = snap.privileged ? "" : "NO SUDO";
-  const tagX = W - 3 - textWidth(up) - 8 - textWidth(tag);
-  const limit = tag ? tagX - 6 : W - textWidth(up) - 8;
+  // Icon items take 9 + text + 7 px; right items take text + 8. When full, the least important drop.
+  const shown = fitByPriority(items, W - 6, (it) => (it.icon ? 16 : 8) + textWidth(it.text));
   let x = 3;
-  for (const it of items) {
-    const w = 9 + textWidth(it.text) + 7;
-    if (x + w - 7 > limit) break;
-    cv.blit(it.icon, x, 2);
+  for (const it of shown.filter((i) => !i.right)) {
+    cv.blit(it.icon!, x, 2);
     drawText(cv, x + 9, 2, it.text, it.color);
-    x += w;
+    x += 16 + textWidth(it.text);
   }
-  if (tag) drawText(cv, tagX, 2, tag, P.warn);
-  drawTextRight(cv, W - 3, 2, up, P.dim);
+  let r = W - 3;
+  for (const it of shown.filter((i) => i.right).reverse()) {
+    drawTextRight(cv, r, 2, it.text, it.color);
+    r -= textWidth(it.text) + 8;
+  }
 }
 
 /**
