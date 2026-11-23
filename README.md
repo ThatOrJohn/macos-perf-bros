@@ -28,11 +28,11 @@ The GPU, power, thermal, network and disk readings come from Apple's `powermetri
 To launch without a prompt, add a sudoers rule for **exactly** the powermetrics command perf-bros runs. `perf-bros --sudoers` prints that rule, and the install steps:
 
 ```bash
-perf-bros --sudoers > /tmp/perf-bros.sudoers
-sudo visudo -cf /tmp/perf-bros.sudoers && sudo install -m 0440 /tmp/perf-bros.sudoers /etc/sudoers.d/perf-bros
+tmp=$(mktemp) && perf-bros --sudoers > "$tmp"
+sudo visudo -cf "$tmp" && sudo install -m 0440 -o root -g wheel "$tmp" /etc/sudoers.d/perf-bros; rm -f "$tmp"
 ```
 
-The rule pins every argument. Don't loosen it to `/usr/bin/powermetrics` with arbitrary arguments: powermetrics can write files with `-o`, so that would let anything running as you write files as root. If a perf-bros update changes the powermetrics arguments, the rule stops matching and you'll get the password prompt again; re-run the steps above. To remove the rule: `sudo rm /etc/sudoers.d/perf-bros`.
+`mktemp` makes a private file with an unpredictable name. Don't stage the rule at a fixed path like `/tmp/perf-bros.sudoers`: another local user could swap the file between the check and the install. The rule pins every argument. Don't loosen it to `/usr/bin/powermetrics` with arbitrary arguments: powermetrics can write files with `-o`, so that would let anything running as you write files as root. If a perf-bros update changes the powermetrics arguments, the rule stops matching and you'll get the password prompt again; re-run the steps above. To remove the rule: `sudo rm /etc/sudoers.d/perf-bros`.
 
 If powermetrics exits mid-session, perf-bros keeps running without it and retries after 2 s, 5 s, 15 s, then every 60 s. A retry can only succeed while sudo is still cached (about 5 minutes after the password prompt) or with the sudoers rule above.
 

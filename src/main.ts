@@ -77,8 +77,10 @@ if (args.sudoers) {
 # Only this exact command line is allowed (powermetrics can write files with -o,
 # so never allow it with arbitrary arguments). Install it with a syntax check:
 #
-#   perf-bros --sudoers > /tmp/perf-bros.sudoers
-#   sudo visudo -cf /tmp/perf-bros.sudoers && sudo install -m 0440 /tmp/perf-bros.sudoers /etc/sudoers.d/perf-bros
+#   tmp=$(mktemp) && perf-bros --sudoers > "$tmp"
+#   sudo visudo -cf "$tmp" && sudo install -m 0440 -o root -g wheel "$tmp" /etc/sudoers.d/perf-bros; rm -f "$tmp"
+#
+# (mktemp gives a private, unpredictable file; never stage this in a fixed /tmp path.)
 #
 # Remove it with: sudo rm /etc/sudoers.d/perf-bros
 ${sudoersLine(userInfo().username)}`);
