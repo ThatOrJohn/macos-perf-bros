@@ -3,7 +3,8 @@
  * and the 60-s graph on the log scale capped at 10 MB/s. Directional packets/s
  * ease lane speeds from 18 to 54 px/s; their sum drives the mast beacon
  * (0.5–3.5 Hz, log scale capped at 100k packets/s). Four PID-stable clouds
- * scale 0.6–1.2 with process rx + tx bytes/s. Labels give the current rates.
+ * scale 0.6–1.2 with process rx + tx bytes/s, ordered by a per-PID key so both
+ * renderers agree. The graph shows only measured seconds. Labels give the rates.
  */
 import type { NetThroughput } from "../../core/snapshot.ts";
 import { mix, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
@@ -16,20 +17,23 @@ import { processName } from "../process-field.ts";
 const SKY = [P.skyTop, mix(P.skyTop, P.skyBot, 0.5), P.skyBot];
 const INBOUND = [4, 6, 8, 10];
 const OUTBOUND = [30, 31, 33];
-const cloudX = (slot: number) => 9 + 18 * slot;
+// Cloud band x 0–72 (4 slots of 18); the mast owns x 73–79.
+const BAND = [0, 72] as const;
 
 function drawClouds(f: Frame, sky: NetSky): void {
-  for (const [slot, cloud] of sky.clouds.slots.entries()) {
-    if (!cloud || cloud.presence === 0) continue;
+  const { clouds } = sky.clouds;
+  for (const cloud of clouds) {
+    if (cloud.presence === 0) continue;
     const scale = cloud.scale * cloud.presence;
     const w = Math.max(1, Math.round(6 * scale));
     const h = Math.max(1, Math.round(4 * scale));
-    outlined(f.canvas, P.ink, (layer) => drawCloud(layer, cloudX(slot), 21, w, h));
+    outlined(f.canvas, P.ink, (layer) => drawCloud(layer, sky.clouds.center(cloud, ...BAND), 21, w, h));
   }
-  for (const [slot, cloud] of sky.clouds.slots.entries()) {
-    if (!cloud || cloud.departing || cloud.presence === 0) continue;
+  // Labels only for settled clouds, so a join/leave glide never overlaps text.
+  for (const cloud of clouds) {
+    if (cloud.departing || cloud.presence < 1) continue;
     const { name, netRxBps, netTxBps } = cloud.proc;
-    const x = cloudX(slot);
+    const x = sky.clouds.center(cloud, ...BAND);
     f.centered(x, 15, processName(name, 16), P.white, P.hudBg);
     f.centered(x, 16, `↓${fmtBytes(netRxBps)} ↑${fmtBytes(netTxBps)}`, P.hudFg, P.hudBg);
   }
@@ -38,7 +42,7 @@ function drawClouds(f: Frame, sky: NetSky): void {
 function drawRadio(cv: PixelCanvas, beacon: boolean): void {
   cv.vline(76, 12, 16, P.metalLight);
   cv.hline(74, 76, 15, P.metalLight);
-  for (let y = 17; y <= 26; y++) {
+  for (let y = 17; y <= 25; y++) {
     cv.set(75 - Number(y > 22), y, P.metal);
     cv.set(77 + Number(y > 22), y, P.metalLight);
     if (y % 3 === 0) cv.hline(75 - Number(y > 22), 77 + Number(y > 22), y, P.stoneDark);
@@ -69,11 +73,13 @@ export function drawNetworkZone(f: Frame, ctx: DrawCtx, sky: NetSky, net: NetThr
   }
   drawRadio(cv, sky.beacon);
   const packets = String(Math.round(net.rxPps + net.txPps));
-  f.text(73, 14, "PKT/S", P.dim, P.hudBg);
-  f.text(79 - packets.length, 15, packets, P.white, P.hudBg);
+  // Below the mast (lattice ends at canvas y 25 = row 13), not over it.
+  f.text(74, 15, "PKT/S", P.dim, P.hudBg);
+  f.text(79 - packets.length, 16, packets, P.white, P.hudBg);
   bevel(cv, 1, 36, 78, 8, P.hudBg, P.stoneDeep, P.stoneDeep);
   f.text(2, 20, "60S", P.dim, P.hudBg);
-  drawNetHistory(cv, sky.history, 6, 77, 41, 3);
+  // Band y 36–43 (inner 37–42): rx spans y 38–42, tx 37–41.
+  drawNetHistory(cv, sky.history, Math.floor(ctx.snap.t / 1000), 6, 77, 42, 4);
   f.text(77 - rx.length - tx.length - 2, 22, rx, P.ok, P.hudBg);
   f.text(77 - tx.length, 22, tx, P.accent, P.hudBg);
   drawHint(f, "esc back  q quit", "↓ IN  ↑ OUT  LOG SCALE");
