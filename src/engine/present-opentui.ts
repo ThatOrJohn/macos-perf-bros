@@ -4,8 +4,14 @@
  *
  * The 80×24 logical screen is scaled by the largest integer factor that fits
  * and centered.
+ *
+ * Cost: setCell is an FFI call, and OpenTUI clears the frame's buffer after
+ * every encode, so writing every cell every frame dominated the CPU budget.
+ * The canvas is kept in a persistent offscreen buffer instead: each frame only
+ * the cells whose two pixels changed are written, and the whole area is copied
+ * with one native drawFrameBuffer call.
  */
-import { RGBA, Renderable, type OptimizedBuffer, type RenderContext } from "@opentui/core";
+import { OptimizedBuffer, RGBA, Renderable, type RenderContext } from "@opentui/core";
 import { CANVAS_H, CANVAS_ROW0, CANVAS_W, Frame, SCREEN_COLS, SCREEN_ROWS, type Color } from "./canvas.ts";
 
 const BOLD = 1; // OpenTUI TextAttributes.BOLD
@@ -28,9 +34,51 @@ export class PixelView extends Renderable {
   frame: Frame = new Frame();
   /** Shown instead of the game when the terminal is below 80×24. */
   private tooSmall = false;
+  /** Offscreen copy of the canvas area at the current scale, updated incrementally. */
+  private offscreen?: OptimizedBuffer;
+  private offScale = 0;
+  /** Canvas pixels as of the last offscreen update. */
+  private readonly prev = new Int32Array(CANVAS_W * CANVAS_H);
 
-  constructor(ctx: RenderContext) {
-    super(ctx, { id: "pixel-view", width: "100%", height: "100%" });
+  constructor(private readonly renderCtx: RenderContext) {
+    super(renderCtx, { id: "pixel-view", width: "100%", height: "100%" });
+  }
+
+  /** Writes changed cells into the offscreen buffer; everything on a scale change. */
+  private updateOffscreen(cv: Frame["canvas"], s: number): OptimizedBuffer {
+    let full = false;
+    if (!this.offscreen || this.offScale !== s) {
+      this.offscreen?.destroy();
+      this.offscreen = OptimizedBuffer.create(CANVAS_W * s, (CANVAS_H * s) / 2, this.renderCtx.widthMethod, {
+        id: "pixel-view-canvas",
+        owner: (this.renderCtx as unknown as { nativeScene: Parameters<typeof OptimizedBuffer.create>[3]["owner"] }).nativeScene,
+      });
+      this.offScale = s;
+      full = true;
+    }
+    const off = this.offscreen;
+    const px = cv.px;
+    const prev = this.prev;
+    const cellRows = (CANVAS_H * s) / 2;
+    for (let cy = 0; cy < cellRows; cy++) {
+      const top = Math.floor((cy * 2) / s) * CANVAS_W;
+      const bot = Math.floor((cy * 2 + 1) / s) * CANVAS_W;
+      for (let x = 0; x < CANVAS_W * s; x++) {
+        const lx = Math.floor(x / s);
+        const a = px[top + lx]!;
+        const b = px[bot + lx]!;
+        if (!full && prev[top + lx] === a && prev[bot + lx] === b) continue;
+        off.setCell(x, cy, "▀", rgba(a), rgba(b));
+      }
+    }
+    prev.set(px);
+    return off;
+  }
+
+  protected override destroySelf(): void {
+    this.offscreen?.destroy();
+    this.offscreen = undefined;
+    super.destroySelf();
   }
 
   protected override renderSelf(buf: OptimizedBuffer): void {
@@ -55,17 +103,8 @@ export class PixelView extends Renderable {
     // HUD band (row 0, s rows tall)
     buf.fillRect(ox, oy, SCREEN_COLS * s, s, rgba(f.hudBg));
 
-    // canvas: physical half-pixel rows = CANVAS_H * s, each maps back to a logical pixel row
-    const cellRows = (CANVAS_H * s) / 2;
-    for (let cy = 0; cy < cellRows; cy++) {
-      const yTop = Math.floor((cy * 2) / s);
-      const yBot = Math.floor((cy * 2 + 1) / s);
-      const sy = oy + CANVAS_ROW0 * s + cy;
-      for (let px = 0; px < CANVAS_W * s; px++) {
-        const lx = Math.floor(px / s);
-        buf.setCell(ox + px, sy, "▀", rgba(cv.get(lx, yTop)), rgba(cv.get(lx, yBot)));
-      }
-    }
+    // canvas: one native copy of the incrementally updated offscreen buffer
+    buf.drawFrameBuffer(ox, oy + CANVAS_ROW0 * s, this.updateOffscreen(cv, s));
 
     // text runs: positioned on the scaled grid, drawn at normal size
     for (const t of f.texts) {

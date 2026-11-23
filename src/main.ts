@@ -150,6 +150,11 @@ function detectMode(r: CliRenderer): Mode | undefined {
 }
 
 const game = new Game();
+// Adaptive frame rate (DESIGN.md §9.1, ROADMAP R9): full speed only while the
+// player walks or a transition runs; ambient animation is fine at IDLE_FPS.
+const ACTIVE_FPS = 30;
+// OpenTUI alone costs ~1% + 0.26% per fps; ~5 fps keeps ambient motion readable.
+const IDLE_FPS = 5;
 let cleaned = false;
 function cleanup(): void {
   if (cleaned) return;
@@ -161,7 +166,7 @@ function cleanup(): void {
 // Every exit path (q, Ctrl-C, signals) ends up in renderer.destroy() → onDestroy.
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
-  targetFps: 30,
+  targetFps: ACTIVE_FPS,
   onDestroy: () => {
     cleanup();
     process.exit(0);
@@ -197,9 +202,12 @@ renderer.setFrameCallback(async () => {
   const snap = source.at(t);
   if (mode === "blocks") blocks.frame = game.draw(snap, t, dt);
   else image.present(game.drawHi(snap, t, dt));
+  const fps = game.busy() ? ACTIVE_FPS : IDLE_FPS;
+  if (renderer.targetFps !== fps) renderer.targetFps = fps;
 });
 
 renderer.keyInput.on("keypress", (key) => {
+  renderer.targetFps = ACTIVE_FPS; // respond at full speed; the frame callback drops it again when idle
   if (game.key(key.name) === "quit") renderer.destroy();
   // r: cycle renderer (handy for comparing)
   if (key.name === "r") applyMode(mode === "blocks" ? "kitty" : "blocks");

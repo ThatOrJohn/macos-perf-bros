@@ -309,13 +309,19 @@ Names: show **at least 8 characters** in hi-res (5×7 font, 6 px advance). Six c
 
 ## R9. Idle frame-rate drop
 
-**Goal:** DESIGN.md §9.1 says to drop to about 5 fps when nothing is animating. Measure first, then implement.
+**Status:** mostly done in `claude/render-overhead`. The app now runs at 30 fps while the player walks or the zoom transition runs, and at 5 fps otherwise (`Game.busy()`, `ACTIVE_FPS`/`IDLE_FPS` in `src/main.ts`). Half-block rendering updates only changed cells in an offscreen buffer, Kitty skips identical frames, and `Game` reuses its output buffers.
 
-**Spec:** measure the app's CPU with `ps -o %cpu -p <pid>` over 60 s in `bun run demo`, in both renderers. If it's above the 3% budget:
-- Lower `renderer.targetFps` while the player is idle and no transition is running.
-- Make ambient animations step at about 5 Hz in that state.
+Measured with `bun run demo` in the Claude terminal panel: process CPU over 60 s, as a percentage of one core.
 
-Report the before/after numbers in the PR.
+| | Before | After |
+|---|---|---|
+| blocks | 17.6% | 5.3% |
+| kitty | 18.9% | 5.9% |
+
+**Still open:** the ~3% budget isn't met. A bare OpenTUI app with nothing on screen costs about 1.0% fixed plus 0.26% per fps (1.6% at 2 fps, 3.7% at 10 fps), so 3% total means about 2 fps idle. The options need a maintainer call:
+- accept about 5% at 5 fps idle, or
+- idle at 2 fps, or
+- freeze ambient animation when idle and redraw only on 1 Hz data changes.
 
 ---
 

@@ -130,6 +130,14 @@ export class Frame {
   readonly texts: TextRun[] = [];
   hudBg: Color = 0;
 
+  /** Clear for reuse, so a frame can be redrawn without allocating (AGENTS.md rule 7). */
+  reset(): this {
+    this.canvas.px.fill(0);
+    this.texts.length = 0;
+    this.hudBg = 0;
+    return this;
+  }
+
   text(col: number, row: number, text: string, fg: Color, bg?: Color, bold?: boolean): void {
     this.texts.push({ col, row, text, fg, bg, bold });
   }
