@@ -54,6 +54,18 @@ The output is a stream of XML plists separated by **NUL** (`\0`). Each one is a 
 
 - Thermal pressure other than Nominal, swap growing over time, GPU under load, and any machine with a battery. Use synthetic fixtures (phase 1) or a capture from another Mac.
 
+## Synthetic replays
+
+The checked-in [scenarios](scenarios/) use the bundled M1 capture as a seed and contain 20 snapshots at one-second intervals. Load peaks at playback times 9 and 10 seconds, then returns to its initial level. The degraded replay retains CPU busy percentages, memory, and processes while omitting privileged readings.
+
+```sh
+bun run scripts/make-scenarios.ts
+bun run src/main.ts --replay fixtures/scenarios/cpu-fire.ndjson
+bun run stills -- --scenarios
+```
+
+Scenario stills replay the ramp before capturing each scene at 10.5 seconds. Look in `docs/stills/scenarios/<scenario>/` for both the half-block and hi-res PNGs.
+
 ## Privacy
 
 Captures are anonymized by [`scripts/anonymize-fixtures.py`](../scripts/anonymize-fixtures.py), which `capture-fixtures.sh` runs automatically:

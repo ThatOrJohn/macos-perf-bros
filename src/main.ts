@@ -9,6 +9,7 @@
  *   bun run src/main.ts --renderer kitty  # force a renderer: auto | kitty | sixel | blocks
  *   bun run src/main.ts --scale 3         # fixed pre-scale for pixel-image renderers
  *   bun run src/main.ts --png OUTDIR      # render review stills instead of running
+ *   bun run stills -- --scenarios        # render the synthetic scenario matrix
  *
  * Renderers:
  *   kitty / sixel  320×192 hi-res art drawn as a real pixel image
@@ -27,6 +28,7 @@ import { ImagePresenter } from "./engine/present-image.ts";
 import { PixelView } from "./engine/present-opentui.ts";
 import { canvasToPng, frameToPng } from "./engine/png.ts";
 import { Game } from "./world/game.ts";
+import { ZONE_ORDER } from "./world/overworld.ts";
 
 type Mode = "kitty" | "sixel" | "blocks";
 
@@ -36,6 +38,7 @@ const { values: args } = parseArgs({
     record: { type: "string" },
     "no-sudo": { type: "boolean", default: false },
     png: { type: "string" },
+    scenarios: { type: "boolean" },
     renderer: { type: "string", default: "auto" },
     scale: { type: "string" },
   },
@@ -44,14 +47,42 @@ const { values: args } = parseArgs({
 const FIXTURE = "fixtures/raw/apple-m1_macos-27.0.1";
 
 if (args.png) {
-  await renderStills(args.png, await loadFixtureReplay(args.replay ?? FIXTURE));
+  if (args.scenarios) {
+    if (args.replay) throw new Error("--scenarios uses the bundled replays and cannot be combined with --replay");
+    const dir = "fixtures/scenarios";
+    const files = [...new Bun.Glob("*.ndjson").scanSync({ cwd: dir, onlyFiles: true })].sort();
+    if (!files.length) throw new Error(`No scenarios found in ${dir}`);
+    for (const file of files) {
+      const replay = await loadNdjsonReplay(join(dir, file));
+      // The generator places peak load at the middle sample.
+      const t = Math.floor(replay.sampleCount / 2) + 0.5;
+      const shots: StillShot[] = [
+        { name: "overworld", keys: [], t },
+        ...ZONE_ORDER.map((name, i) => ({ name, keys: [String(i + 1)], t })),
+      ];
+      await renderStills(join(args.png, "scenarios", file.slice(0, -".ndjson".length)), replay, shots, true);
+    }
+  } else {
+    const shots: StillShot[] = [
+      { name: "1-overworld-idle", keys: [], t: 2.5 },
+      { name: "2-overworld-load", keys: [], t: 8.5 },
+      { name: "3-cpu-idle", keys: ["return"], t: 2.5 },
+      { name: "4-cpu-load", keys: ["return"], t: 8.5 },
+      { name: "5-memory", keys: ["right", "return"], t: 2.5 },
+      { name: "6-placeholder", keys: ["6"], t: 2.5 },
+    ];
+    await renderStills(args.png, await openReplay(args.replay ?? FIXTURE), shots);
+  }
   process.exit(0);
+}
+if (args.scenarios) throw new Error("--scenarios requires --png (or use bun run stills -- --scenarios)");
+
+function openReplay(path: string): Promise<SnapshotSource> {
+  return path.endsWith(".ndjson") ? loadNdjsonReplay(path) : loadFixtureReplay(path);
 }
 
 async function openSource(): Promise<SnapshotSource> {
-  if (args.replay) {
-    return args.replay.endsWith(".ndjson") ? loadNdjsonReplay(args.replay) : loadFixtureReplay(args.replay);
-  }
+  if (args.replay) return openReplay(args.replay);
   // Validate sudo before the TUI owns the terminal, so the prompt is a normal one.
   const privileged = !args["no-sudo"] && ensureSudo({ interactive: !!process.stdin.isTTY, log: (m) => console.error(m) });
   if (!privileged) console.error("Continuing without sudo: GPU, power, thermal and CPU frequencies will be unavailable.");
@@ -135,30 +166,34 @@ renderer.start();
 
 // ---------------------------------------------------------------- stills
 
-async function renderStills(outDir: string, source: SnapshotSource): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: { name: string; keys: string[]; t: number }[] = [
-    { name: "1-overworld-idle", keys: [], t: 2.5 },
-    { name: "2-overworld-load", keys: [], t: 8.5 },
-    { name: "3-cpu-idle", keys: ["return"], t: 2.5 },
-    { name: "4-cpu-load", keys: ["return"], t: 8.5 },
-    { name: "5-memory", keys: ["right", "return"], t: 2.5 },
-    { name: "6-placeholder", keys: ["6"], t: 2.5 },
-  ];
-  for (const shot of shots) {
-    // run a few frames so the player settles and the iris finishes
-    const lo = new Game();
-    for (const k of shot.keys) lo.key(k);
-    let f = lo.draw(source.at(shot.t), shot.t - 2, 0);
-    for (let i = 1; i <= 60; i++) f = lo.draw(source.at(shot.t), shot.t - 2 + i / 30, 1 / 30);
-    const path = join(outDir, `${shot.name}.png`);
-    await Bun.write(path, frameToPng(f));
+type StillShot = { name: string; keys: string[]; t: number };
 
+async function renderStills(outDir: string, source: SnapshotSource, shots: StillShot[], replayTimeline = false): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  for (const shot of shots) {
+    // Scenario stills follow the replay through the ramp so smoothing and scene
+    // history reflect the actual samples. The original stills settle on one sample.
+    const start = replayTimeline ? 0 : shot.t - 2;
+    const final = source.at(shot.t);
+    const initial = replayTimeline ? source.at(start) : final;
+    const lo = new Game();
     const hi = new Game();
-    for (const k of shot.keys) hi.key(k);
-    let cv = hi.drawHi(source.at(shot.t), shot.t - 2, 0);
-    for (let i = 1; i <= 60; i++) cv = hi.drawHi(source.at(shot.t), shot.t - 2 + i / 30, 1 / 30);
+    for (const k of shot.keys) {
+      lo.key(k);
+      hi.key(k);
+    }
+    let f = lo.draw(initial, start, 0);
+    let cv = hi.drawHi(initial, start, 0);
+    const frames = Math.round((shot.t - start) * 30);
+    for (let i = 1; i <= frames; i++) {
+      const t = start + i / 30;
+      const snap = replayTimeline ? source.at(t) : final;
+      f = lo.draw(snap, t, 1 / 30);
+      cv = hi.drawHi(snap, t, 1 / 30);
+    }
+    const path = join(outDir, `${shot.name}.png`);
     const hiPath = join(outDir, `${shot.name}-hires.png`);
+    await Bun.write(path, frameToPng(f));
     await Bun.write(hiPath, canvasToPng(cv, 2));
     console.log(path, hiPath);
   }

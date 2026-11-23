@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
+import { loadNdjsonReplay } from "../src/core/recorder.ts";
 import { loadFixtureReplay } from "../src/core/replay.ts";
 import { PixelView } from "../src/engine/present-opentui.ts";
 import { Game } from "../src/world/game.ts";
+import { ZONE_ORDER } from "../src/world/overworld.ts";
 
 const source = await loadFixtureReplay("fixtures/raw/apple-m1_macos-27.0.1");
 
@@ -66,3 +68,28 @@ test("hi-res frames render every scene and publish through the image presenter",
   img.dispose();
   renderer.destroy();
 });
+
+const scenarioDir = "fixtures/scenarios";
+for (const file of [...new Bun.Glob("*.ndjson").scanSync({ cwd: scenarioDir, onlyFiles: true })].sort()) {
+  test(`${file} renders every sample in every scene in both renderers`, async () => {
+    const replay = await loadNdjsonReplay(`${scenarioDir}/${file}`);
+    const scenes = ["overworld", ...ZONE_ORDER] as const;
+    for (const [i, scene] of scenes.entries()) {
+      const lo = new Game();
+      const hi = new Game();
+      if (i > 0) {
+        lo.key(String(i));
+        hi.key(String(i));
+      }
+      expect(lo.scene).toBe(scene);
+      expect(hi.scene).toBe(scene);
+      for (let t = 0; t < replay.sampleCount; t++) {
+        const snap = replay.at(t);
+        const frame = lo.draw(snap, t, 1 / 30);
+        const canvas = hi.drawHi(snap, t, 1 / 30);
+        expect([frame.canvas.w, frame.canvas.h]).toEqual([80, 46]);
+        expect([canvas.w, canvas.h]).toEqual([320, 192]);
+      }
+    }
+  });
+}
