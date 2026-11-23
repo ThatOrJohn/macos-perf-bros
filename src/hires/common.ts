@@ -5,7 +5,7 @@
 import { PixelCanvas, mix, sprite, type Color, type Sprite } from "../engine/canvas.ts";
 import { drawText, drawTextCentered, drawTextRight, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
-import { bayer, bevel, blitOutlined, disc, ditherGradientV, glow, outlined } from "../engine/paint.ts";
+import { bayer, bevel, blitOutlined, disc, dither, ditherGradientV, glow, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { cpuTotalPct, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
 
@@ -290,6 +290,45 @@ export function drawHintHi(cv: PixelCanvas, left: string, right = ""): void {
 }
 
 // ---------------------------------------------------------------- backdrops
+
+const CLOUD_BLOBS = [[-26, 4, 9], [-12, -2, 12], [6, -5, 13], [22, 0, 11], [34, 5, 7], [-34, 7, 6], [0, 6, 12], [18, 7, 9]] as const;
+
+/** The shared cloud silhouette. Attachments share the overworld cloud's outline. */
+export function drawCloudHi(cv: PixelCanvas, cx: number, cy: number, scale: number, attachment?: (layer: PixelCanvas) => void): void {
+  outlined(cv, X.cloudOutline, (layer) => {
+    for (const [bx, by, radius] of CLOUD_BLOBS) {
+      disc(layer, cx + Math.round(bx * scale), cy + Math.round(by * scale), Math.round(radius * scale), P.cloud);
+    }
+    const shadeY = cy + Math.round(6 * scale);
+    for (const [bx, by, radius] of CLOUD_BLOBS) {
+      const x0 = cx + Math.round(bx * scale);
+      const y0 = cy + Math.round(by * scale);
+      const r = Math.round(radius * scale);
+      for (let y = Math.max(-r, shadeY + 1 - y0); y <= r; y++) {
+        for (let x = -r; x <= r; x++) {
+          if (x * x + y * y > r * r) continue;
+          const px = x0 + x;
+          const py = y0 + y;
+          layer.set(px, py, dither(px, py, P.cloudShade, P.cloud, 0.25));
+        }
+      }
+    }
+    attachment?.(layer);
+  });
+}
+
+/** Draw the radio tower into the caller's outline layer. */
+export function drawMastHi(layer: PixelCanvas, x: number, top: number, bottom: number, width: number): void {
+  for (let y = top; y < bottom; y++) {
+    const half = Math.round(((y - top) / (bottom - top)) * width);
+    layer.set(x - half, y, P.metal);
+    layer.set(x + half, y, P.metalLight);
+    if (y % 3 === 0) layer.hline(x - half, x + half, y, P.stoneDark);
+  }
+  const dishY = top + 8;
+  for (let i = -4; i <= 4; i++) layer.set(x - 8 + Math.round(i * 0.3), dishY + i, P.metalLight);
+  layer.hline(x - 7, x - 2, dishY, P.metal);
+}
 
 export function drawNightSky(cv: PixelCanvas, y0: number, y1: number, t: number, moon = true): void {
   ditherGradientV(cv, 0, y0, W, y1, [X.sky0, X.sky1, X.sky2, X.sky3]);

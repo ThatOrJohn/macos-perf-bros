@@ -109,6 +109,10 @@ test("the peak samples reach the specified visual stress targets", async () => {
   expect(mem.memory!.compressedB).toBe(8 * 1024 ** 3);
   expect(mem.memory!.swapUsedB / mem.memory!.swapTotalB).toBeCloseTo(0.97);
   expect(net.net).toMatchObject({ rxBps: 80_000_000, txBps: 5_000_000 });
+  const netTasks = net.procs.filter((proc) => proc.netRxBps + proc.netTxBps > 0);
+  expect(netTasks).toHaveLength(6);
+  expect(netTasks.some((proc) => proc.netTxBps > proc.netRxBps)).toBe(true);
+  expect(netTasks.some((proc) => proc.netRxBps + proc.netTxBps < 10_000)).toBe(true);
   expect(net.procs.filter(({ netRxBps }) => netRxBps >= 10_000_000)).toHaveLength(3);
   expect(disk.disk).toMatchObject({ readBps: 1_500_000_000, writeBps: 600_000_000 });
   expect(disk.procs.filter(({ diskReadBps, diskWriteBps }) => diskReadBps >= 400_000_000 && diskWriteBps >= 100_000_000)).toHaveLength(2);

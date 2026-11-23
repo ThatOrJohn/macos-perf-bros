@@ -50,6 +50,17 @@ const procs = capture.procs.slice(0, 12).map(({ pid, name }, i) => ({
 const idle: Snapshot = { ...capture, cpu, gpu, memory, power, net, disk, procs, thermal: "nominal" };
 const maxFreq = new Map(cpu.clusters.map((cluster) => [cluster.name, cluster.maxFreqMHz]));
 
+// Keep the existing three receive-heavy tasks, then add a sender and two
+// small bidirectional tasks. Rates are bytes per second.
+const netTasks = [
+  [36 * MB, 1.5 * MB],
+  [26 * MB, 1.25 * MB],
+  [16 * MB, MB],
+  [80_000, MB],
+  [6_000, 2_100],
+  [3_500, 1_000],
+] as const;
+
 const scenarios: Record<string, (load: number) => Partial<Snapshot>> = {
   idle: () => ({}),
   "cpu-fire": (load) => ({
@@ -91,9 +102,10 @@ const scenarios: Record<string, (load: number) => Partial<Snapshot>> = {
       rxBps: Math.round(80 * MB * load), txBps: 5 * MB,
       rxPps: Math.round(60_000 * load), txPps: 4_000,
     },
-    procs: procs.map((proc, i) => i < 3 ? {
-      ...proc, netRxBps: Math.round((36 - 10 * i) * MB * load), netTxBps: (2 - i / 2) * MB,
-    } : proc),
+    procs: procs.map((proc, i) => {
+      const rates = netTasks[i];
+      return rates ? { ...proc, netRxBps: Math.round(rates[0] * load), netTxBps: rates[1] } : proc;
+    }),
   }),
   "disk-thrash": (load) => ({
     disk: {
