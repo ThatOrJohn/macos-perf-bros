@@ -21,6 +21,8 @@ export class ImagePresenter {
   private buf?: Uint8Array;
   private scale = 0;
   private dims = "";
+  /** Last published canvas; identical frames are not re-sent to the terminal. */
+  private last = new Int32Array(0);
 
   constructor(private readonly renderer: CliRenderer, private readonly opts: ImagePresenterOptions = {}) {
     this.view = new ImageRenderable(renderer, {
@@ -45,6 +47,10 @@ export class ImagePresenter {
     const W = cv.w * k;
     const H = cv.h * k;
     const dims = `${W}x${H}`;
+    // Each publish re-sends the whole image to the terminal: skip unchanged frames.
+    if (dims === this.dims && sameInts(this.last, cv.px)) return;
+    if (this.last.length !== cv.px.length) this.last = new Int32Array(cv.px.length);
+    this.last.set(cv.px);
     if (dims !== this.dims) {
       this.pool?.dispose();
       this.pool = new NativeImagePool({ width: W, height: H, capacity: 3 });
@@ -83,4 +89,10 @@ export class ImagePresenter {
   get currentScale(): number {
     return this.scale;
   }
+}
+
+function sameInts(a: Int32Array, b: Int32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

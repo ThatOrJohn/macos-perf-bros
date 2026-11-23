@@ -33,11 +33,24 @@ export class Game {
   private readonly sm = new Smoother();
   private readonly processField = new ProcessField(PROCESS_LIMIT);
   private readonly processFieldHi = new ProcessField(PROCESS_LIMIT_HI);
+  // Output buffers are reused across frames (no per-frame canvas allocation).
+  // A returned Frame / PixelCanvas is valid until the next draw() / drawHi().
+  private readonly frame = new Frame();
+  private readonly canvasHi = new PixelCanvas(HI_W, HI_H);
   private readonly netSky = new NetSky(4, 6, 18);
   private readonly netSkyHi = new NetSky(5, 14, 60);
   private irisStart = -Infinity;
   private irisCenter = { x: 40, y: 23 };
   private now = 0;
+
+  /**
+   * True while something on screen needs the full frame rate: the player
+   * walking or an iris transition. Otherwise only ambient animation (stars,
+   * smoke, slimes) and 1 Hz data are moving, and the app drops to IDLE_FPS.
+   */
+  busy(): boolean {
+    return this.ow.walking || this.now - this.irisStart < IRIS_S;
+  }
 
   /** Returns "quit" when the app should exit. */
   key(name: string): "quit" | undefined {
@@ -88,7 +101,7 @@ export class Game {
   /** Low-res (80×46 half-block) frame. */
   draw(snap: Snapshot, t: number, dt: number): Frame {
     this.tick(t, dt);
-    const f = new Frame();
+    const f = this.frame.reset();
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
     switch (this.scene) {
       case "overworld": drawOverworld(f, ctx, this.ow); break;
@@ -105,7 +118,8 @@ export class Game {
   /** Hi-res (320×192) frame for pixel-image terminals. */
   drawHi(snap: Snapshot, t: number, dt: number): PixelCanvas {
     this.tick(t, dt);
-    const cv = new PixelCanvas(HI_W, HI_H);
+    const cv = this.canvasHi;
+    cv.px.fill(0);
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
     switch (this.scene) {
       case "overworld": drawOverworldHi(cv, ctx, this.ow); break;

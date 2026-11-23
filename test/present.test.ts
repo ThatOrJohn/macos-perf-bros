@@ -124,6 +124,44 @@ for (const file of [...new Bun.Glob("*.ndjson").scanSync({ cwd: scenarioDir, onl
   });
 }
 
+test("incremental half-block updates match a full redraw, across scene changes and resizes", async () => {
+  const game = new Game();
+  const capture = async (frames: (() => import("../src/engine/canvas.ts").Frame)[], size: [number, number]) => {
+    const { renderer, renderOnce, captureSpans, resize } = await createTestRenderer({ width: size[0], height: size[1] });
+    const view = new PixelView(renderer);
+    renderer.root.add(view);
+    for (const next of frames) {
+      view.frame = next();
+      await renderOnce();
+    }
+    return { spans: JSON.stringify(captureSpans()), renderer, view, renderOnce, captureSpans, resize };
+  };
+  // A: many frames with walking, a zone change and back, then the final frame.
+  const steps: (() => import("../src/engine/canvas.ts").Frame)[] = [];
+  for (let i = 0; i < 40; i++) {
+    steps.push(() => {
+      if (i === 10) game.key("right");
+      if (i === 20) game.key("1");
+      if (i === 30) game.key("escape");
+      return game.draw(source.at(2 + i / 10), 2 + i / 30, 1 / 30);
+    });
+  }
+  const a = await capture(steps, [80, 24]);
+  // B: a fresh view that only ever sees the last frame.
+  const last = (a.view as PixelView).frame;
+  const b = await capture([() => last], [80, 24]);
+  expect(a.spans).toBe(b.spans);
+
+  // A again after a resize to 2× scale: the offscreen buffer is rebuilt in full.
+  a.resize(170, 50);
+  await a.renderOnce();
+  const c = await capture([() => last], [170, 50]);
+  expect(JSON.stringify(a.captureSpans())).toBe(c.spans);
+  a.renderer.destroy();
+  b.renderer.destroy();
+  c.renderer.destroy();
+});
+
 test("Network Sky renders traffic, idle, degraded and empty process snapshots in both renderers", async () => {
   const [burst, idle, degraded] = await Promise.all(
     ["net-burst", "idle", "degraded"].map(async (name) => (await loadNdjsonReplay(`${scenarioDir}/${name}.ndjson`)).at(10)),
