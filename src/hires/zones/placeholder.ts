@@ -3,14 +3,24 @@ import { drawTextCentered } from "../../engine/font5x7.ts";
 import { P } from "../../engine/palette.ts";
 import { bevel, outlined } from "../../engine/paint.ts";
 import type { DrawCtx } from "../../world/common.ts";
-import { W, X, drawGrassField, drawHintHi, drawHudHi, drawMountains, drawNightSky, drawRobot } from "../common.ts";
+import { W, X, drawGrassField, drawLockedPanelHi, drawHintHi, drawHudHi, drawMountains, drawNightSky, drawRobot } from "../common.ts";
 
-/** Hi-res stand-in for zones that aren't built yet. */
-export function drawPlaceholderZoneHi(cv: PixelCanvas, ctx: DrawCtx, name: string): void {
+/**
+ * Hi-res stand-in for zones that aren't built yet. When the zone's data
+ * needs sudo and is missing, the locked panel replaces the sign.
+ */
+export function drawPlaceholderZoneHi(cv: PixelCanvas, ctx: DrawCtx, name: string, locked = false): void {
   drawNightSky(cv, 11, 130, ctx.t);
   drawMountains(cv, 130, 36, 20, 1.7);
   drawGrassField(cv, 130, 181);
   drawTextCentered(cv, W / 2, 14, name, P.accent, { shadow: X.outline });
+  if (locked) {
+    drawLockedPanelHi(cv);
+    drawRobot(cv, 196, 146, ctx.t, false);
+    drawHudHi(cv, ctx.snap);
+    drawHintHi(cv, "ESC BACK  Q QUIT", "NO DATA WITHOUT SUDO");
+    return;
+  }
   outlined(cv, X.outline, (l) => {
     bevel(l, 146, 100, 4, 44, P.wood, P.path, P.woodDark);
     bevel(l, 170, 100, 4, 44, P.wood, P.path, P.woodDark);

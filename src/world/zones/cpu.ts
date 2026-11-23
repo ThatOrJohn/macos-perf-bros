@@ -1,7 +1,8 @@
 /**
  * CPU Fortress (DESIGN.md §7.3): one wing per cluster kind, one brick pillar
  * per core. Pillar height = core active %, flag height = cluster freq / max.
- * Pillars above 85% catch fire.
+ * Pillars above 85% catch fire. Without sudo there is no frequency data
+ * (maxFreqMHz 0): the flag is hidden and the header reads NO SUDO · FREQ N/A.
  */
 import { mix, type Color, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { ditherGradientV, outlined } from "../../engine/paint.ts";
@@ -129,12 +130,14 @@ export function drawCpuZone(f: Frame, ctx: DrawCtx): void {
     const freq = ctx.sm.get(`cpu.freq.${wing.kind}`, cl?.freqMHz ?? 0, ctx.dt);
     const max = cl?.maxFreqMHz || 1;
     const poleX = wing.kind === "E" ? wing.x0 - 3 : wing.x1 + 3;
-    drawFlag(cv, poleX, Math.min(1, freq / max), b, ctx.t, wing.kind === "E");
+    const hasFreq = !!cl?.maxFreqMHz;
+    if (hasFreq) drawFlag(cv, poleX, Math.min(1, freq / max), b, ctx.t, wing.kind === "E");
     const mid = (wing.x0 + wing.x1) / 2;
     const name = wing.kind === "E" ? "EFFICIENCY" : "PERFORMANCE";
     f.centered(mid, 3, `${name} ×${wing.cores.length}`, wing.kind === "E" ? P.eBrickLight : P.pBrickLight, undefined, true);
     const act = ctx.sm.get(`cpu.cl.${wing.kind}`, cl?.activePct ?? 0, ctx.dt);
-    f.centered(mid, 4, `${Math.round(freq)}/${max} MHz · busy ${fmtPct(act)}`, P.white);
+    if (hasFreq) f.centered(mid, 4, `${Math.round(freq)}/${max} MHz · busy ${fmtPct(act)}`, P.white);
+    else f.centered(mid, 4, "NO SUDO · FREQ N/A", P.dim);
   }
 
   drawHud(f, ctx.snap);

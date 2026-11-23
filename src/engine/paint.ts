@@ -173,3 +173,31 @@ export function glow(cv: PixelCanvas, cx: number, cy: number, r: number, c: Colo
     }
   }
 }
+
+// ---------------------------------------------------------------- locked tiles
+
+let lockSaved = new Int32Array(0);
+
+/**
+ * Draw with `draw`, then dim only the pixels it changed inside the box by a
+ * 50% checker toward `toward`. Used for zones whose data is unavailable
+ * (no sudo) so they read as locked, not broken. Surroundings stay untouched.
+ * The save buffer grows once and is reused.
+ */
+export function drawDimmed(cv: PixelCanvas, x: number, y: number, w: number, h: number, toward: Color, draw: () => void): void {
+  const x0 = Math.max(0, x);
+  const y0 = Math.max(0, y);
+  const x1 = Math.min(cv.w, x + w);
+  const y1 = Math.min(cv.h, y + h);
+  const bw = x1 - x0;
+  if (bw <= 0 || y1 <= y0) return draw();
+  if (lockSaved.length < bw * (y1 - y0)) lockSaved = new Int32Array(bw * (y1 - y0));
+  for (let yy = y0; yy < y1; yy++) lockSaved.set(cv.px.subarray(yy * cv.w + x0, yy * cv.w + x1), (yy - y0) * bw);
+  draw();
+  for (let yy = y0; yy < y1; yy++) {
+    for (let xx = x0; xx < x1; xx++) {
+      const i = yy * cv.w + xx;
+      if ((xx + yy) & 1 && cv.px[i] !== lockSaved[(yy - y0) * bw + xx - x0]) cv.px[i] = toward;
+    }
+  }
+}
