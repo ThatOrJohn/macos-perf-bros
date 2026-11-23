@@ -251,7 +251,7 @@ There are two renderers. **Every scene must be implemented in both.**
 | Item | Budget |
 |---|---|
 | Render loop | ≤ 30 fps; drop to ~5 fps when nothing is animating |
-| Total CPU (UI + collectors, excluding `powermetrics`) | < 3% of one P-core at steady state |
+| Total CPU (UI + collectors, excluding `powermetrics`) | < 5% of one P-core at steady state (idle at 5 fps; OpenTUI's own floor is ~1% + 0.26% per fps) |
 | Memory | < 150 MB RSS |
 | Sample interval | 1000 ms (configurable) |
 

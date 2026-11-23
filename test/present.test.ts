@@ -25,8 +25,9 @@ async function render(cols: number, rows: number, keys: string[]) {
 
 test("overworld renders HUD, half-block pixels and hint line at 80×24", async () => {
   const lines = await render(80, 24, []);
-  expect(lines[0]).toContain("PERF·BROS");
-  expect(lines[0]).toContain("CPU");
+  // The brand is the first field to drop when the HUD row is full.
+  expect(lines[0]).toMatch(/^(?: PERF·BROS │ )?CPU /);
+  expect(lines[0]).toContain("GPU");
   expect(lines[5]).toContain("▀");
   expect(lines[23]).toContain("CPU FORTRESS");
 });
@@ -34,13 +35,13 @@ test("overworld renders HUD, half-block pixels and hint line at 80×24", async (
 test("every zone renders without throwing", async () => {
   for (const k of ["1", "2", "3", "4", "5", "6"]) {
     const lines = await render(80, 24, [k]);
-    expect(lines[0]).toContain("PERF·BROS");
+    expect(lines[0]).toMatch(/CPU +\d+%/);
   }
 });
 
 test("scales 2× and centers in a large terminal", async () => {
   const lines = await render(170, 50, ["1"]);
-  const hudRow = lines.findIndex((l) => l.includes("PERF·BROS"));
+  const hudRow = lines.findIndex((l) => /CPU +\d+%/.test(l));
   expect(hudRow).toBe(1); // (50 - 48) / 2
   expect(lines.some((l) => l.includes("CPU FORTRESS"))).toBe(true);
 });
@@ -122,6 +123,44 @@ for (const file of [...new Bun.Glob("*.ndjson").scanSync({ cwd: scenarioDir, onl
     }
   });
 }
+
+test("incremental half-block updates match a full redraw, across scene changes and resizes", async () => {
+  const game = new Game();
+  const capture = async (frames: (() => import("../src/engine/canvas.ts").Frame)[], size: [number, number]) => {
+    const { renderer, renderOnce, captureSpans, resize } = await createTestRenderer({ width: size[0], height: size[1] });
+    const view = new PixelView(renderer);
+    renderer.root.add(view);
+    for (const next of frames) {
+      view.frame = next();
+      await renderOnce();
+    }
+    return { spans: JSON.stringify(captureSpans()), renderer, view, renderOnce, captureSpans, resize };
+  };
+  // A: many frames with walking, a zone change and back, then the final frame.
+  const steps: (() => import("../src/engine/canvas.ts").Frame)[] = [];
+  for (let i = 0; i < 40; i++) {
+    steps.push(() => {
+      if (i === 10) game.key("right");
+      if (i === 20) game.key("1");
+      if (i === 30) game.key("escape");
+      return game.draw(source.at(2 + i / 10), 2 + i / 30, 1 / 30);
+    });
+  }
+  const a = await capture(steps, [80, 24]);
+  // B: a fresh view that only ever sees the last frame.
+  const last = (a.view as PixelView).frame;
+  const b = await capture([() => last], [80, 24]);
+  expect(a.spans).toBe(b.spans);
+
+  // A again after a resize to 2× scale: the offscreen buffer is rebuilt in full.
+  a.resize(170, 50);
+  await a.renderOnce();
+  const c = await capture([() => last], [170, 50]);
+  expect(JSON.stringify(a.captureSpans())).toBe(c.spans);
+  a.renderer.destroy();
+  b.renderer.destroy();
+  c.renderer.destroy();
+});
 
 test("Network Sky renders traffic, idle, degraded and empty process snapshots in both renderers", async () => {
   const [burst, idle, degraded] = await Promise.all(

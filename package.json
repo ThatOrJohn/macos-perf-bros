@@ -3,11 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "perf-bros": "src/main.ts"
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "bench:parse": "bun run scripts/bench-parse.ts",
-    "demo": "bun run src/main.ts --replay fixtures/raw/apple-m1_macos-27.0.1",
+    "demo": "bun run src/main.ts --demo",
     "stills": "bun run src/main.ts --png docs/stills",
     "start": "bun run src/main.ts",
     "bench:render": "bun run scripts/bench-render.ts"

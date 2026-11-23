@@ -8,7 +8,7 @@
  *   ps                    every 2 s     RSS per pid (and procs in degraded mode)
  */
 import { HostCpuSampler } from "../collectors/hostcpu.ts";
-import { startPowermetrics, type PowermetricsHandle } from "../collectors/powermetrics-process.ts";
+import { startPowermetrics, supervise } from "../collectors/powermetrics-process.ts";
 import { readBootTimeS, readMemory, readPs, readTopology } from "../collectors/system.ts";
 import { SnapshotBus } from "./bus.ts";
 import type { Snapshot } from "./snapshot.ts";
@@ -37,7 +37,7 @@ export async function startLive(opts: LiveOptions): Promise<LiveSource> {
   const bus = new SnapshotBus(topology, bootTimeS);
   const interval = opts.intervalMs ?? 1000;
   const timers: ReturnType<typeof setInterval>[] = [];
-  let pm: PowermetricsHandle | undefined;
+  let pm: { stop(): void } | undefined;
   let pmStatus = opts.privileged ? "starting" : "not privileged (run with sudo access for GPU, power, thermal, frequencies)";
 
   // host CPU fallback (cheap; always on so degraded mode is instant)
@@ -64,14 +64,18 @@ export async function startLive(opts: LiveOptions): Promise<LiveSource> {
 
   // powermetrics
   if (opts.privileged) {
-    pm = startPowermetrics({
-      intervalMs: interval,
-      onReading: (r) => { bus.setPowermetrics(r); pmStatus = "running"; },
-      onError: (e) => opts.log?.(`powermetrics sample skipped: ${e}`),
-    });
-    pm.exited.then((code) => {
-      pmStatus = `exited (code ${code})`;
-      opts.log?.(`powermetrics exited with code ${code}; continuing in degraded mode`);
+    // Supervised: if powermetrics dies, restart it with backoff instead of
+    // staying in degraded mode for the rest of the session.
+    pm = supervise({
+      start: () => startPowermetrics({
+        intervalMs: interval,
+        onReading: (r) => { bus.setPowermetrics(r); pmStatus = "running"; },
+        onError: (e) => opts.log?.(`powermetrics sample skipped: ${e}`),
+      }),
+      onStatus: (s) => {
+        pmStatus = s;
+        opts.log?.(`powermetrics ${s}`);
+      },
     });
   }
 

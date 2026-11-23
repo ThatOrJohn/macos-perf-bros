@@ -55,31 +55,55 @@ export function hash(x: number, y: number, seed = 0): number {
 
 // ---------------------------------------------------------------- HUD
 
+/**
+ * Keep items in their order, dropping the least important ones first until
+ * they fit. `pri`: lower = more important. `width(i)` includes separators.
+ */
+export function fitByPriority<T extends { pri: number }>(items: T[], budget: number, width: (item: T, index: number) => number): T[] {
+  const kept = [...items];
+  const total = () => kept.reduce((sum, it, i) => sum + width(it, i), 0);
+  while (kept.length && total() > budget) {
+    let worst = 0;
+    for (let i = 1; i < kept.length; i++) if (kept[i]!.pri >= kept[worst]!.pri) worst = i;
+    kept.splice(worst, 1);
+  }
+  return kept;
+}
+
+/** HUD field importance when the row is full (lower = kept longer). Shared by both renderers. */
+export const HUD_PRI = { cpu: 0, gpu: 1, mem: 2, thermal: 3, power: 4, battery: 5, net: 6, nosudo: 7, uptime: 8, brand: 9 } as const;
+
 export function drawHud(f: Frame, snap: Snapshot): void {
   f.hudBg = P.hudBg;
   const cpu = cpuTotalPct(snap);
   const mem = snap.memory;
-  const fields: [string, Color][] = [
-    [" PERF·BROS ", P.accent],
-    [`CPU ${fmtPct(cpu).padStart(4)}`, cpu > 85 ? P.crit : cpu > 60 ? P.warn : P.hudFg],
+  type Field = { text: string; color: Color; pri: number; bold?: boolean };
+  const fields: Field[] = [
+    { text: " PERF·BROS ", color: P.accent, pri: HUD_PRI.brand, bold: true },
+    { text: `CPU ${fmtPct(cpu).padStart(4)}`, color: cpu > 85 ? P.crit : cpu > 60 ? P.warn : P.hudFg, pri: HUD_PRI.cpu },
   ];
-  if (mem) fields.push([`MEM ${fmtBytes(mem.usedB)}/${fmtBytes(mem.totalB, 0)}`, pressureColor(mem.pressure)]);
-  if (snap.net) fields.push([`NET ↓${fmtBytes(snap.net.rxBps)} ↑${fmtBytes(snap.net.txBps)}`, P.hudFg]);
-  if (snap.power) fields.push([`PWR ${snap.power.packageW.toFixed(1)}W`, P.hudFg]);
-  if (snap.thermal) fields.push([snap.thermal.toUpperCase(), thermalColor(snap.thermal)]);
-  fields.push([snap.battery ? `♥ ${Math.round(snap.battery.pct)}%` : "AC", P.hudFg]);
-  if (!snap.privileged) fields.push(["NO SUDO", P.warn]);
-  fields.push([`UP ${fmtUptime(snap.uptimeS)}`, P.dim]);
+  // GPU busy % (powermetrics only), same thresholds as CPU.
+  const gpu = snap.gpu?.activePct;
+  if (gpu !== undefined) fields.push({ text: `GPU ${fmtPct(gpu).padStart(4)}`, color: gpu > 85 ? P.crit : gpu > 60 ? P.warn : P.hudFg, pri: HUD_PRI.gpu });
+  if (mem) fields.push({ text: `MEM ${fmtBytes(mem.usedB)}/${fmtBytes(mem.totalB, 0)}`, color: pressureColor(mem.pressure), pri: HUD_PRI.mem });
+  if (snap.net) fields.push({ text: `NET ↓${fmtBytes(snap.net.rxBps)} ↑${fmtBytes(snap.net.txBps)}`, color: P.hudFg, pri: HUD_PRI.net });
+  if (snap.power) fields.push({ text: `PWR ${snap.power.packageW.toFixed(1)}W`, color: P.hudFg, pri: HUD_PRI.power });
+  if (snap.thermal) fields.push({ text: snap.thermal.toUpperCase(), color: thermalColor(snap.thermal), pri: HUD_PRI.thermal });
+  fields.push({ text: snap.battery ? `♥ ${Math.round(snap.battery.pct)}%` : "AC", color: P.hudFg, pri: HUD_PRI.battery });
+  if (!snap.privileged) fields.push({ text: "NO SUDO", color: P.warn, pri: HUD_PRI.nosudo });
+  fields.push({ text: `UP ${fmtUptime(snap.uptimeS)}`, color: P.dim, pri: HUD_PRI.uptime });
 
-  // Fields drop off the right end when the row is full; separators only between drawn fields.
+  // When the row is full the least important fields drop; separators only between drawn fields.
+  const SEP = " │ ";
+  const shown = fitByPriority(fields, 80, (it, i) => it.text.length + (i ? SEP.length : 0));
   let col = 0;
-  for (const [i, [text, color]] of fields.entries()) {
-    const sep = i === 0 ? "" : " │ ";
-    if (col + sep.length + text.length > 80) break;
-    if (sep) f.text(col, 0, sep, P.stoneDark, P.hudBg);
-    col += sep.length;
-    f.text(col, 0, text, color, P.hudBg, i === 0);
-    col += text.length;
+  for (const [i, it] of shown.entries()) {
+    if (i) {
+      f.text(col, 0, SEP, P.stoneDark, P.hudBg);
+      col += SEP.length;
+    }
+    f.text(col, 0, it.text, it.color, P.hudBg, it.bold);
+    col += it.text.length;
   }
 }
 

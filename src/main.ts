@@ -1,6 +1,10 @@
+#!/usr/bin/env bun
 /**
- * perf-bros entry point.
+ * perf-bros entry point. Installed as the `perf-bros` command by `bun link`.
  *
+ *   perf-bros                             # same as bun start
+ *   perf-bros --demo                      # replay the bundled M1 fixtures, from any directory
+ *   perf-bros --sudoers                   # print a sudoers rule for passwordless powermetrics
  *   bun start                             # live: this Mac (asks for sudo for powermetrics)
  *   bun start -- --no-sudo                # live, degraded mode (no GPU/power/thermal/freqs)
  *   bun start -- --record s.ndjson        # live, and record merged snapshots
@@ -18,10 +22,11 @@
  */
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { mkdir } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { startLive, type SnapshotSource } from "./core/live.ts";
-import { ensureSudo } from "./core/privilege.ts";
+import { ensureSudo, sudoersLine } from "./core/privilege.ts";
 import { Recorder, loadNdjsonReplay } from "./core/recorder.ts";
 import { loadFixtureReplay } from "./core/replay.ts";
 import { ImagePresenter } from "./engine/present-image.ts";
@@ -41,15 +46,52 @@ const { values: args } = parseArgs({
     scenarios: { type: "boolean" },
     renderer: { type: "string", default: "auto" },
     scale: { type: "string" },
+    demo: { type: "boolean", default: false },
+    sudoers: { type: "boolean", default: false },
+    help: { type: "boolean", short: "h", default: false },
   },
 });
 
-const FIXTURE = "fixtures/raw/apple-m1_macos-27.0.1";
+// Bundled data resolves from the repo, not the cwd, so `perf-bros` works anywhere.
+const ROOT = join(import.meta.dir, "..");
+const FIXTURE = join(ROOT, "fixtures/raw/apple-m1_macos-27.0.1");
+
+if (args.help) {
+  console.log(`perf-bros: an Apple Silicon system monitor that plays like a platformer
+
+  perf-bros                  live (asks for sudo once so powermetrics can run)
+  perf-bros --no-sudo        live without GPU, power, thermal, network, disk, CPU frequency
+  perf-bros --demo           replay the bundled recording (no sudo)
+  perf-bros --replay PATH    replay a fixture dir or a recorded .ndjson
+  perf-bros --record FILE    live, and record snapshots to FILE (.ndjson)
+  perf-bros --renderer MODE  auto | kitty | sixel | blocks
+  perf-bros --scale N        fixed pre-scale for kitty/sixel
+  perf-bros --sudoers        print a sudoers rule so powermetrics needs no password
+
+Keys: arrows/hjkl move · enter · esc back · 1-6 jump · r renderer · q quit`);
+  process.exit(0);
+}
+
+if (args.sudoers) {
+  console.log(`# Lets perf-bros start powermetrics without a password prompt.
+# Only this exact command line is allowed (powermetrics can write files with -o,
+# so never allow it with arbitrary arguments). Install it with a syntax check:
+#
+#   tmp=$(mktemp) && perf-bros --sudoers > "$tmp"
+#   sudo visudo -cf "$tmp" && sudo install -m 0440 -o root -g wheel "$tmp" /etc/sudoers.d/perf-bros; rm -f "$tmp"
+#
+# (mktemp gives a private, unpredictable file; never stage this in a fixed /tmp path.)
+#
+# Remove it with: sudo rm /etc/sudoers.d/perf-bros
+${sudoersLine(userInfo().username)}`);
+  process.exit(0);
+}
+if (args.demo) args.replay ??= FIXTURE;
 
 if (args.png) {
   if (args.scenarios) {
     if (args.replay) throw new Error("--scenarios uses the bundled replays and cannot be combined with --replay");
-    const dir = "fixtures/scenarios";
+    const dir = join(ROOT, "fixtures/scenarios");
     const files = [...new Bun.Glob("*.ndjson").scanSync({ cwd: dir, onlyFiles: true })].sort();
     if (!files.length) throw new Error(`No scenarios found in ${dir}`);
     for (const file of files) {
@@ -109,6 +151,11 @@ function detectMode(r: CliRenderer): Mode | undefined {
 }
 
 const game = new Game();
+// Adaptive frame rate (DESIGN.md §9.1, ROADMAP R9): full speed only while the
+// player walks or a transition runs; ambient animation is fine at IDLE_FPS.
+const ACTIVE_FPS = 30;
+// OpenTUI alone costs ~1% + 0.26% per fps; ~5 fps keeps ambient motion readable.
+const IDLE_FPS = 5;
 let cleaned = false;
 function cleanup(): void {
   if (cleaned) return;
@@ -120,7 +167,7 @@ function cleanup(): void {
 // Every exit path (q, Ctrl-C, signals) ends up in renderer.destroy() → onDestroy.
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
-  targetFps: 30,
+  targetFps: ACTIVE_FPS,
   onDestroy: () => {
     cleanup();
     process.exit(0);
@@ -156,9 +203,12 @@ renderer.setFrameCallback(async () => {
   const snap = source.at(t);
   if (mode === "blocks") blocks.frame = game.draw(snap, t, dt);
   else image.present(game.drawHi(snap, t, dt));
+  const fps = game.busy() ? ACTIVE_FPS : IDLE_FPS;
+  if (renderer.targetFps !== fps) renderer.targetFps = fps;
 });
 
 renderer.keyInput.on("keypress", (key) => {
+  renderer.targetFps = ACTIVE_FPS; // respond at full speed; the frame callback drops it again when idle
   if (game.key(key.name) === "quit") renderer.destroy();
   // r: cycle renderer (handy for comparing)
   if (key.name === "r") applyMode(mode === "blocks" ? "kitty" : "blocks");
