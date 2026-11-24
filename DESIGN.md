@@ -188,8 +188,9 @@ A tile map of zones connected by paths. The player sprite walks between zones wi
 - Zero traffic shows an empty sky and flat history after sustained idle. Missing system-wide network data shows the locked panel.
 
 **Disk Mines**
-- Two rail lines underground: read and write. Cart frequency and speed = throughput.
-- Each mounted volume is a shaft whose depth fill = capacity used.
+- Ore carts climb the upper rail for reads, while stone carts descend the lower rail for writes. Each active rail holds one to seven carts based on operations/s (log scale capped at 100,000 ops/s). Directional bytes/s sets cart speed (log scale capped at 1 GB/s).
+- Wall lanterns flicker faster with total operations/s. The three highest-throughput processes appear as helmet-lamp robots. Their pickaxe cadence follows combined read and write bytes/s on the same throughput scale.
+- Signs show directional bytes/s and operations/s, total operations/s, and each miner's name and combined bytes/s. Missing disk data shows the locked panel.
 
 **Process Plains**
 - The top twelve processes by CPU in hi-res and six in half-block appear as slimes in a fenced dusk meadow. A slime keeps its slot and color by PID while ranked. New entries grow in and departures shrink away.

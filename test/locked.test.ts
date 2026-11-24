@@ -73,9 +73,9 @@ test("locked zones show the NEEDS SUDO panel in both renderers", () => {
     const { lo, hi } = settle([key], degraded.at(3));
     expect(textOf(lo)).toContain("NEEDS SUDO");
     expect(textOf(lo)).not.toContain("UNDER");
-    expect(hi.get(100, 90)).toBe(P.hudBg); // inside the hi-res panel (x 77–242)
+    expect(hi.get(100, 62)).toBe(P.stoneLight); // top edge of the hi-res panel
     const open = settle([key], privileged.at(3));
     expect(textOf(open.lo)).not.toContain("NEEDS SUDO");
-    expect(open.hi.get(100, 90)).not.toBe(P.hudBg);
+    expect(open.hi.get(100, 62)).not.toBe(P.stoneLight);
   }
 });

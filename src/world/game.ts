@@ -6,6 +6,7 @@ import { Frame, PixelCanvas } from "../engine/canvas.ts";
 import { H as HI_H, W as HI_W, irisHi } from "../hires/common.ts";
 import { drawOverworldHi, hiPos } from "../hires/overworld.ts";
 import { drawCpuZoneHi } from "../hires/zones/cpu.ts";
+import { drawDiskZoneHi } from "../hires/zones/disk.ts";
 import { drawMemoryZoneHi } from "../hires/zones/memory.ts";
 import { drawNetworkZoneHi } from "../hires/zones/network.ts";
 import { drawPlaceholderZoneHi } from "../hires/zones/placeholder.ts";
@@ -14,10 +15,12 @@ import { P } from "../engine/palette.ts";
 import { Smoother } from "../engine/tween.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import type { DrawCtx } from "./common.ts";
+import { DiskMines } from "./disk-mines.ts";
 import { ZONES, ZONE_ORDER, drawOverworld, zoneLocked, neighbor, newOverworldState, stepPlayer, type ZoneId } from "./overworld.ts";
 import { NetHistory, NetSky } from "./net-sky.ts";
 import { ProcessField } from "./process-field.ts";
 import { drawCpuZone } from "./zones/cpu.ts";
+import { drawDiskZone } from "./zones/disk.ts";
 import { drawMemoryZone } from "./zones/memory.ts";
 import { drawNetworkZone } from "./zones/network.ts";
 import { drawPlaceholderZone } from "./zones/placeholder.ts";
@@ -33,6 +36,8 @@ export class Game {
   private readonly sm = new Smoother();
   private readonly processField = new ProcessField(PROCESS_LIMIT);
   private readonly processFieldHi = new ProcessField(PROCESS_LIMIT_HI);
+  private readonly diskMines = new DiskMines();
+  private readonly diskMinesHi = new DiskMines();
   // Output buffers are reused across frames (no per-frame canvas allocation).
   // A returned Frame / PixelCanvas is valid until the next draw() / drawHi().
   private readonly frame = new Frame();
@@ -117,6 +122,7 @@ export class Game {
       case "cpu": drawCpuZone(f, ctx); break;
       case "mem": drawMemoryZone(f, ctx); break;
       case "net": drawNetworkZone(f, ctx, this.netSky, snap.net); break;
+      case "disk": drawDiskZone(f, ctx, this.diskMines); break;
       case "proc": drawProcessZone(f, ctx, this.processField); break;
       default: drawPlaceholderZone(f, ctx, ZONES[this.scene].name, zoneLocked(this.scene, snap));
     }
@@ -136,6 +142,7 @@ export class Game {
       case "cpu": drawCpuZoneHi(cv, ctx); break;
       case "mem": drawMemoryZoneHi(cv, ctx); break;
       case "net": drawNetworkZoneHi(cv, ctx, this.netSkyHi, snap.net); break;
+      case "disk": drawDiskZoneHi(cv, ctx, this.diskMinesHi); break;
       case "proc": drawProcessZoneHi(cv, ctx, this.processFieldHi); break;
       default: drawPlaceholderZoneHi(cv, ctx, ZONES[this.scene].name, zoneLocked(this.scene, snap));
     }
