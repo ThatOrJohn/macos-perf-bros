@@ -1,10 +1,15 @@
 /**
  * Hi-res overworld (320×192). Same zones, links and player state as the
  * low-res overworld; node positions map through `hiPos`.
+ * E/P activity drives smoke and flames, memory use fills the gauge, and
+ * pressure/swap drive its lamp/drips. Watts and thermal pressure drive the
+ * plant's smoke/glows and lava. Throughput drives packets and the mine cart,
+ * and process CPU drives the slimes. These animate over cached static art.
  */
 import { mix, type PixelCanvas } from "../engine/canvas.ts";
 import { drawText, textWidth } from "../engine/font5x7.ts";
 import { P } from "../engine/palette.ts";
+import { stamped } from "../engine/stamp.ts";
 import { bevel, bricks, disc, dither, drawDimmed, glow, line, outlined } from "../engine/paint.ts";
 import { cpuTotalPct, fmtBytes, fmtPct, hash, pressureColor, type DrawCtx } from "../world/common.ts";
 import { drawPacketStreak } from "../world/net-sky.ts";
@@ -20,6 +25,8 @@ export function hiPos(p: { x: number; y: number }): { x: number; y: number } {
 }
 
 const GROUND_Y = 84;
+const POS = Object.fromEntries(Object.values(ZONES).map((z) => [z.id, hiPos(z)])) as Record<ZoneId, { x: number; y: number }>;
+const TILE_ORDER = ["net", "cpu", "mem", "power", "proc", "disk"] as const;
 
 // ---------------------------------------------------------------- paths
 
@@ -60,7 +67,7 @@ function castle(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
   drawSmokeHi(cv, dx - 24, dy - 58, e / 100, ctx.t, 1);
   drawSmokeHi(cv, dx + 24, dy - 58, p / 100, ctx.t, 2);
 
-  outlined(cv, X.outline, (l) => {
+  stamped(cv, "overworld.castle", (target) => outlined(target, X.outline, (l) => {
     // keep
     bricks(l, dx - 20, dy - 32, 40, 32, STONE, 8, 4);
     for (let x = dx - 20; x < dx + 20; x += 8) bevel(l, x, dy - 37, 5, 5, P.stone, P.stoneLight, P.stoneDark);
@@ -88,7 +95,7 @@ function castle(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
     for (let x = dx - 6; x <= dx + 6; x += 3) l.vline(x, dy - 15, dy - 1, P.metal);
     l.hline(dx - 6, dx + 6, dy - 10, P.metal);
     for (let i = -7; i <= 7; i++) l.set(dx + i, dy - 17 - Math.round(Math.sqrt(Math.max(0, 49 - i * i)) * 0.4), P.stoneLight);
-  });
+  }));
   // flags (outside outline pass so they stay bright)
   for (const [fx, c, act] of [[dx - 24, P.eBrickLight, e], [dx + 24, P.pBrickLight, p]] as const) {
     const wave = Math.floor(ctx.t * 6) % 3;
@@ -106,7 +113,7 @@ function waterTower(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
   const frac = ctx.sm.get("hi.mem", m ? m.usedB / m.totalB : 0, ctx.dt);
   const tankTop = dy - 52;
   const tankBot = dy - 24;
-  outlined(cv, X.outline, (l) => {
+  stamped(cv, "overworld.tower", (target) => outlined(target, X.outline, (l) => {
     // legs + braces
     for (const [x0, x1] of [[dx - 20, dx - 26], [dx + 20, dx + 26], [dx - 8, dx - 10], [dx + 8, dx + 10]] as const) {
       line(l, x0, tankBot, x1, dy - 1, P.metal);
@@ -134,7 +141,7 @@ function waterTower(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
       for (let x = -half; x <= half; x++) l.set(dx + x, tankTop - 9 + r, x < -half / 3 ? P.metalLight : x > half / 3 ? P.stoneDark : P.metal);
     }
     l.vline(dx, tankTop - 13, tankTop - 9, P.metalLight);
-  });
+  }));
   // gauge window with live level
   const wx0 = dx - 14;
   const wy0 = tankTop + 7;
@@ -177,7 +184,7 @@ function powerPlant(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
   // No power reading (no sudo): no smoke or chimney glow, since both encode watts.
   const live = !!ctx.snap.power;
   if (live) drawSmokeHi(cv, dx + 27, dy - 62, 0.25 + heat * 0.75, ctx.t, 3);
-  outlined(cv, X.outline, (l) => {
+  stamped(cv, "overworld.plant", (target) => outlined(target, X.outline, (l) => {
     bricks(l, dx - 24, dy - 26, 44, 26, BRICK_RED, 8, 4);
     // sawtooth roof
     for (let i = 0; i < 4; i++) {
@@ -199,7 +206,7 @@ function powerPlant(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
     // door
     l.rect(dx - 4, dy - 10, 8, 10, P.woodDark);
     l.vline(dx, dy - 10, dy - 1, X.outline);
-  });
+  }));
   // windows glow with watts
   for (let i = 0; i < 3; i++) {
     const wx = dx - 20 + i * 14;
@@ -219,12 +226,12 @@ function powerPlant(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void
 function lavaPit(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
   const th = ctx.snap.thermal;
   const level = th === "nominal" ? 0.2 : th === "moderate" ? 0.55 : th ? 1 : 0;
-  outlined(cv, X.outline, (l) => {
+  stamped(cv, "overworld.lava-rim", (target) => outlined(target, X.outline, (l) => {
     for (let i = -9; i <= 9; i++) {
       const d = Math.round(Math.sqrt(81 - i * i) * 0.45);
       for (let j = -d; j <= d; j++) l.set(x + i, y + j, Math.abs(j) === d || Math.abs(i) === 9 ? X.rock : X.rockDark);
     }
-  });
+  }));
   for (let i = -7; i <= 7; i++) {
     const d = Math.round(Math.sqrt(49 - i * i) * 0.35);
     for (let j = -d; j <= d; j++) {
@@ -242,19 +249,23 @@ function cloudIsland(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): voi
   for (let i = 0; i < Math.round(rx * 8); i++) drawPacketStreak(cv, W + 10 - ((ctx.t * 70 + i * 47) % (W + 20)), 16 + (i % 3) * 4, -1, P.ok, 10);
   for (let i = 0; i < Math.round(tx * 8); i++) drawPacketStreak(cv, ((ctx.t * 70 + i * 47 + 20) % (W + 20)) - 10, 44 + (i % 2) * 4, 1, P.accent, 10);
 
-  drawCloudHi(cv, dx, dy, 1, (layer) => drawMastHi(layer, dx + 22, dy - 26, dy - 8, 3));
+  stamped(cv, "overworld.cloud-and-mast", (cv) => {
+    drawCloudHi(cv, dx, dy, 1, (layer) => drawMastHi(layer, dx + 22, dy - 26, dy - 8, 3));
+  });
   const blink = Math.sin(ctx.t * 5) > 0;
   if (blink) glow(cv, dx + 22, dy - 28, 5, P.crit, 0.7);
   cv.set(dx + 22, dy - 28, blink ? P.crit : P.ember);
 }
 
 function meadow(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
-  // back fence
-  for (let x = dx - 36; x <= dx + 36; x += 9) {
-    bevel(cv, x, dy - 40, 3, 12, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
-  }
-  cv.hline(dx - 36, dx + 38, dy - 36, P.woodDark);
-  cv.hline(dx - 36, dx + 38, dy - 32, P.woodDark);
+  stamped(cv, "overworld.fence", (cv) => {
+    // back fence
+    for (let x = dx - 36; x <= dx + 36; x += 9) {
+      bevel(cv, x, dy - 40, 3, 12, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
+    }
+    cv.hline(dx - 36, dx + 38, dy - 36, P.woodDark);
+    cv.hline(dx - 36, dx + 38, dy - 32, P.woodDark);
+  });
   // critters
   const busy = ctx.snap.procs.filter((p) => p.cpuPct > 5).slice(0, 6);
   busy.forEach((p, i) => {
@@ -275,37 +286,41 @@ function meadow(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
 }
 
 function mine(cv: PixelCanvas, dx: number, dy: number, ctx: DrawCtx): void {
-  // rocky hill
-  outlined(cv, X.outline, (l) => {
-    for (let x = -46; x <= 46; x++) {
-      const top = dy - 46 + Math.round((x / 46) ** 2 * 34 + Math.sin(x * 0.4) * 2);
-      for (let y = top; y < dy - 2; y++) {
-        const h = hash(x, y, 41);
-        const c = y < top + 2 ? P.grass : h < 0.08 ? X.rockLight : h > 0.9 ? X.rockDark : y < top + 10 ? P.dirt : P.dirtDark;
-        l.set(dx + x, y, c);
+  stamped(cv, "overworld.mine", (cv) => {
+    // rocky hill
+    outlined(cv, X.outline, (l) => {
+      for (let x = -46; x <= 46; x++) {
+        const top = dy - 46 + Math.round((x / 46) ** 2 * 34 + Math.sin(x * 0.4) * 2);
+        for (let y = top; y < dy - 2; y++) {
+          const h = hash(x, y, 41);
+          const c = y < top + 2 ? P.grass : h < 0.08 ? X.rockLight : h > 0.9 ? X.rockDark : y < top + 10 ? P.dirt : P.dirtDark;
+          l.set(dx + x, y, c);
+        }
       }
+    });
+    // entrance
+    for (let y = dy - 28; y < dy - 2; y++) {
+      const half = y < dy - 22 ? Math.round(Math.sqrt(Math.max(0, 36 - (y - (dy - 22)) ** 2)) * 1.5) : 9;
+      for (let x = -half; x <= half; x++) cv.set(dx + x, y, mix(X.outline, P.stoneDeep, Math.max(0, (y - (dy - 28)) / 40)));
     }
-  });
-  // entrance
-  for (let y = dy - 28; y < dy - 2; y++) {
-    const half = y < dy - 22 ? Math.round(Math.sqrt(Math.max(0, 36 - (y - (dy - 22)) ** 2)) * 1.5) : 9;
-    for (let x = -half; x <= half; x++) cv.set(dx + x, y, mix(X.outline, P.stoneDeep, Math.max(0, (y - (dy - 28)) / 40)));
-  }
-  outlined(cv, X.outline, (l) => {
-    bevel(l, dx - 12, dy - 28, 3, 26, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
-    bevel(l, dx + 10, dy - 28, 3, 26, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
-    bevel(l, dx - 14, dy - 31, 29, 4, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
+    outlined(cv, X.outline, (l) => {
+      bevel(l, dx - 12, dy - 28, 3, 26, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
+      bevel(l, dx + 10, dy - 28, 3, 26, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
+      bevel(l, dx - 14, dy - 31, 29, 4, P.wood, mix(P.wood, P.white, 0.3), P.woodDark);
+    });
   });
   // lantern
   cv.vline(dx + 16, dy - 27, dy - 24, P.metal);
   glow(cv, dx + 16, dy - 21, 8, X.window, 0.6);
   cv.rect(dx + 15, dy - 23, 3, 4, X.window);
-  // rails heading out of the mine
-  for (let x = dx - 70; x <= dx; x++) {
-    if (x % 5 === 0) cv.vline(x, dy - 6, dy - 2, P.woodDark);
-    cv.set(x, dy - 5, P.metalLight);
-    cv.set(x, dy - 3, P.metal);
-  }
+  stamped(cv, "overworld.rails", (cv) => {
+    // rails heading out of the mine
+    for (let x = dx - 70; x <= dx; x++) {
+      if (x % 5 === 0) cv.vline(x, dy - 6, dy - 2, P.woodDark);
+      cv.set(x, dy - 5, P.metalLight);
+      cv.set(x, dy - 3, P.metal);
+    }
+  });
   // cart: speed by disk throughput, rolls out of the mine and back
   const bps = ctx.sm.get("hi.disk", (ctx.snap.disk?.readBps ?? 0) + (ctx.snap.disk?.writeBps ?? 0), ctx.dt);
   const speed = Math.min(1, Math.log10(1 + bps) / 9);
@@ -349,22 +364,25 @@ export function drawOverworldHi(cv: PixelCanvas, ctx: DrawCtx, st: OverworldStat
   drawMountains(cv, GROUND_Y - 4, 30, 16);
   drawGrassField(cv, GROUND_Y - 4, 181);
 
-  const pos = Object.fromEntries(Object.values(ZONES).map((z) => [z.id, hiPos(z)])) as Record<ZoneId, { x: number; y: number }>;
-  // paths
-  pathH(cv, pos.cpu.x, pos.power.x, pos.cpu.y);
-  pathH(cv, pos.proc.x, pos.disk.x, pos.proc.y);
-  pathV(cv, pos.cpu.x, pos.cpu.y, pos.proc.y);
-  pathV(cv, pos.power.x, pos.power.y, pos.disk.y);
+  stamped(cv, "overworld.paths-and-scenery", (cv) => {
+    // paths
+    pathH(cv, POS.cpu.x, POS.power.x, POS.cpu.y);
+    pathH(cv, POS.proc.x, POS.disk.x, POS.proc.y);
+    pathV(cv, POS.cpu.x, POS.cpu.y, POS.proc.y);
+    pathV(cv, POS.power.x, POS.power.y, POS.disk.y);
 
-  // scenery
-  for (const [x, y, kind] of [[106, 92, 0], [122, 96, 1], [200, 90, 1], [212, 95, 0], [128, 150, 0], [146, 156, 1], [176, 148, 1], [190, 157, 0], [300, 92, 1]] as const) {
-    outlined(cv, X.outline, (l) => l.blit(kind ? PINE : TREE, x - (kind ? 5 : 7), y - (kind ? 12 : 15)));
-  }
+    // scenery
+    for (const [x, y, kind] of [[106, 92, 0], [122, 96, 1], [200, 90, 1], [212, 95, 0], [128, 150, 0], [146, 156, 1], [176, 148, 1], [190, 157, 0], [300, 92, 1]] as const) {
+      outlined(cv, X.outline, (l) => l.blit(kind ? PINE : TREE, x - (kind ? 5 : 7), y - (kind ? 12 : 15)));
+    }
+  });
   lavaPit(cv, 224, 98, ctx);
 
-  // structures (back to front)
-  for (const id of ["net", "cpu", "mem", "power", "proc", "disk"] as ZoneId[]) {
-    const { x, y } = pos[id];
+  // Keep each stamp at its original depth among live effects. Glows sample
+  // the composed background, and a lock dims only pixels changed by its tile.
+  // Structures (back to front)
+  for (const id of TILE_ORDER) {
+    const { x, y } = POS[id];
     const box = LOCK_BOX[id];
     if (box && zoneLocked(id, ctx.snap)) {
       // 50% checker toward the sky's mid tone, then a padlock over the tile.
@@ -374,14 +392,14 @@ export function drawOverworldHi(cv: PixelCanvas, ctx: DrawCtx, st: OverworldStat
   // padlocks after every structure so nothing in front hides them
   for (const id of ["net", "power", "disk"] as const) {
     const box = LOCK_BOX[id]!;
-    if (zoneLocked(id, ctx.snap)) outlined(cv, X.outline, (l) => l.blit(PADLOCK, pos[id].x + box.lx - 3, pos[id].y + box.ly - 4));
+    if (zoneLocked(id, ctx.snap)) outlined(cv, X.outline, (l) => l.blit(PADLOCK, POS[id].x + box.lx - 3, POS[id].y + box.ly - 4));
   }
 
   // labels
   for (const z of Object.values(ZONES)) {
     const sel = st.selected === z.id;
     const text = labelOf(z.id, ctx);
-    const p = pos[z.id];
+    const p = POS[z.id];
     const lx = z.id === "net" ? p.x + 50 : Math.round(p.x - textWidth(text) / 2);
     const ly = z.id === "net" ? p.y - 14 : p.y + 6;
     const locked = zoneLocked(z.id, ctx.snap);

@@ -1,11 +1,15 @@
 /**
  * The overworld: every zone as a live tile on one map (DESIGN.md §7.2).
  * Paths are axis-aligned so the player walks straight between nodes.
+ * CPU/watts set smoke, memory use fills the tank, pressure lights its lamp
+ * and swap adds drips. Thermal pressure sets lava coverage. Disk/network
+ * rates drive the cart/packets, and process CPU drives slime count and speed.
  */
 import { Frame, mix, sprite, type Color, type PixelCanvas } from "../engine/canvas.ts";
 import { ditherGradientV, drawDimmed, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { P } from "../engine/palette.ts";
+import { stamped } from "../engine/stamp.ts";
 import type { Row } from "../ui/table.ts";
 import {
   PADLOCK, PLAYER, cpuTotalPct, drawCloud, drawGrass, drawHint, drawHud, drawSmoke, drawStars,
@@ -127,25 +131,27 @@ function cpuTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
   const cl = ctx.snap.cpu?.clusters ?? [];
   ctx.sm.get("ow.cpu.e", cl.find((c) => c.kind === "E")?.activePct ?? 0, ctx.dt);
   ctx.sm.get("ow.cpu.p", cl.find((c) => c.kind === "P")?.activePct ?? 0, ctx.dt);
-  // wall
-  cv.rect(x - 6, y - 2, 13, 7, P.stone);
-  cv.hline(x - 6, x + 6, y + 4, P.stoneDark);
-  for (let i = -6; i <= 6; i += 2) cv.set(x + i, y - 3, P.stone);
-  // towers: E left (blue trim), P right (orange trim)
-  for (const [tx, trim, trimDark] of [
-    [x - 6, P.eBrick, P.eBrickDark],
-    [x + 4, P.pBrick, P.pBrickDark],
-  ] as const) {
-    cv.rect(tx, y - 6, 3, 11, P.stoneLight);
-    cv.vline(tx + 2, y - 6, y + 4, P.stoneDark);
-    cv.hline(tx, tx + 2, y - 6, trim);
-    cv.set(tx, y - 7, trim);
-    cv.set(tx + 2, y - 7, trimDark);
-    cv.set(tx + 1, y - 2, P.ink); // window
-  }
-  // gate
-  cv.rect(x - 1, y + 1, 3, 4, P.ink);
-  cv.set(x, y, P.ink);
+  stamped(cv, "overworld.castle", (target) => outlined(target, INK, (cv) => {
+    // wall
+    cv.rect(x - 6, y - 2, 13, 7, P.stone);
+    cv.hline(x - 6, x + 6, y + 4, P.stoneDark);
+    for (let i = -6; i <= 6; i += 2) cv.set(x + i, y - 3, P.stone);
+    // towers: E left (blue trim), P right (orange trim)
+    for (const [tx, trim, trimDark] of [
+      [x - 6, P.eBrick, P.eBrickDark],
+      [x + 4, P.pBrick, P.pBrickDark],
+    ] as const) {
+      cv.rect(tx, y - 6, 3, 11, P.stoneLight);
+      cv.vline(tx + 2, y - 6, y + 4, P.stoneDark);
+      cv.hline(tx, tx + 2, y - 6, trim);
+      cv.set(tx, y - 7, trim);
+      cv.set(tx + 2, y - 7, trimDark);
+      cv.set(tx + 1, y - 2, P.ink); // window
+    }
+    // gate
+    cv.rect(x - 1, y + 1, 3, 4, P.ink);
+    cv.set(x, y, P.ink);
+  }));
 }
 
 function memTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
@@ -203,9 +209,11 @@ export const SLIMES = SLIME_COLORS.map(slime);
 export const BOSS = sprite(["..s..", ".sss.", "seses", "sssss"], { s: P.lava, e: P.lavaHi });
 
 function procTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
-  // fence
-  for (let i = -7; i <= 7; i += 3) cv.vline(x + i, y + 2, y + 4, P.wood);
-  cv.hline(x - 7, x + 7, y + 3, P.woodDark);
+  stamped(cv, "overworld.fence", (cv) => {
+    // fence
+    for (let i = -7; i <= 7; i += 3) cv.vline(x + i, y + 2, y + 4, P.wood);
+    cv.hline(x - 7, x + 7, y + 3, P.woodDark);
+  });
   const busy = ctx.snap.procs.filter((p) => p.cpuPct > 5).slice(0, 6);
   busy.forEach((p, i) => {
     const speed = 0.3 + Math.min(1, p.cpuPct / 100) * 1.5;
@@ -236,10 +244,12 @@ function diskTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
 }
 
 function netTile(cv: PixelCanvas, x: number, y: number, ctx: DrawCtx): void {
-  drawCloud(cv, x, y, 9, 3);
-  // dish
-  cv.set(x + 3, y - 4, P.metalLight);
-  cv.hline(x + 2, x + 4, y - 5, P.metalLight);
+  stamped(cv, "overworld.cloud-and-dish", (cv) => {
+    drawCloud(cv, x, y, 9, 3);
+    // dish
+    cv.set(x + 3, y - 4, P.metalLight);
+    cv.hline(x + 2, x + 4, y - 5, P.metalLight);
+  });
   cv.set(x + 3, y - 6, Math.sin(ctx.t * 6) > 0 ? P.crit : P.ember);
   // packets: inbound right→left above, outbound left→right below
   const rx = Math.min(1, Math.log10(1 + (ctx.snap.net?.rxBps ?? 0)) / 7);
@@ -286,32 +296,36 @@ export function drawOverworld(f: Frame, ctx: DrawCtx, st: OverworldState): void 
   // sky, stars, far hills
   ditherGradientV(cv, 0, 0, 80, 16, [0x111630, 0x1b2347, 0x29356a, 0x3d4f88]);
   drawStars(cv, 12, ctx.t);
-  for (let x = 0; x < 80; x++) {
-    const h = 12 + Math.round(Math.sin(x * 0.12) * 2 + Math.sin(x * 0.31 + 1) * 1.5);
-    cv.rect(x, h, 1, 16 - h, P.hill);
-    cv.set(x, h, P.hillLight);
-  }
-  drawGrass(cv, 16, 46);
-
-  // paths (beneath tiles)
-  const drawn = new Set<string>();
-  for (const z of Object.values(ZONES)) {
-    for (const l of z.links) {
-      const key = [z.id, l].sort().join("-");
-      if (drawn.has(key)) continue;
-      drawn.add(key);
-      const b = ZONES[l];
-      if (key === "mem-net") drawLadder(cv, z.x === 40 ? 40 : b.x, Math.min(z.y, b.y) + 3, Math.max(z.y, b.y) - 5);
-      else drawPath(cv, z.x, z.y + 1, b.x, b.y + 1);
+  stamped(cv, "overworld.terrain-and-paths", (cv) => {
+    for (let x = 0; x < 80; x++) {
+      const h = 12 + Math.round(Math.sin(x * 0.12) * 2 + Math.sin(x * 0.31 + 1) * 1.5);
+      cv.rect(x, h, 1, 16 - h, P.hill);
+      cv.set(x, h, P.hillLight);
     }
-  }
+    drawGrass(cv, 16, 46);
+
+    // paths (beneath tiles)
+    const drawn = new Set<string>();
+    for (const z of Object.values(ZONES)) {
+      for (const l of z.links) {
+        const key = [z.id, l].sort().join("-");
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        const b = ZONES[l];
+        if (key === "mem-net") drawLadder(cv, z.x === 40 ? 40 : b.x, Math.min(z.y, b.y) + 3, Math.max(z.y, b.y) - 5);
+        else drawPath(cv, z.x, z.y + 1, b.x, b.y + 1);
+      }
+    }
+  });
 
   // tiles + labels
   for (const z of Object.values(ZONES)) {
     const locked = zoneLocked(z.id, ctx.snap);
     const draw = () => {
-      if (z.id === "net" || z.id === "proc") TILES[z.id](cv, z.x, z.y, ctx);
-      else outlined(cv, INK, (l) => TILES[z.id](l, z.x, z.y, ctx));
+      // For these tiles, the live pixels (drip, lava, cart) share the outline.
+      if (z.id === "mem" || z.id === "power" || z.id === "disk") {
+        outlined(cv, INK, (l) => TILES[z.id](l, z.x, z.y, ctx));
+      } else TILES[z.id](cv, z.x, z.y, ctx);
     };
     if (locked) {
       // Dim the tile toward the dark stone and hang a padlock on it.
