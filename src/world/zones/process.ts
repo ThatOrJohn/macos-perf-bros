@@ -6,12 +6,14 @@
  * the full CPU percentage. The board lists five processes and sums wakeups
  * per second across the six displayed processes.
  */
+import type { Snapshot } from "../../core/snapshot.ts";
 import { Frame, mix, sprite, type PixelCanvas } from "../../engine/canvas.ts";
 import { bevel, ditherGradientV, glow, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
+import type { Row } from "../../ui/table.ts";
 import { drawHint, drawHud, drawStars, fmtBytes, fmtPct, type DrawCtx } from "../common.ts";
 import { BOSS, SLIME_COLORS, SLIMES } from "../overworld.ts";
-import { PROCESS_BOSS_CPU, PROCESS_GLOW_ENERGY, blitScaledSlime, drawProcessGrass, processName, slimeHop, type ProcessField, type Slime } from "../process-field.ts";
+import { PROCESS_BOSS_CPU, PROCESS_GLOW_ENERGY, PROCESS_LIMIT_HI, blitScaledSlime, drawProcessGrass, processName, slimeHop, type ProcessField, type Slime } from "../process-field.ts";
 
 export const PROCESS_LIMIT = 6;
 const SKY = [P.skyTop, mix(P.skyTop, P.skyBot, 0.5), P.skyBot];
@@ -102,4 +104,20 @@ export function drawProcessZone(f: Frame, ctx: DrawCtx, field: ProcessField): vo
   f.centered(40, 1, "PROCESS PLAINS", P.accent, undefined, true);
   drawHud(f, ctx.snap);
   drawHint(f, "esc back  q quit", `TOP ${PROCESS_LIMIT} BY CPU · BOSS > ${PROCESS_BOSS_CPU}%`);
+}
+
+export function tableRows(snap: Snapshot): Row[] {
+  const top = snap.procs.slice(0, PROCESS_LIMIT_HI);
+  if (!top.length) return [["PROCESSES", "NONE", P.dim]];
+  const rows: Row[] = [["TOP PROCESSES", "  CPU     RSS  ENERGY", P.accent]];
+  for (const [i, proc] of top.entries()) {
+    const boss = i === 0 && proc.cpuPct > PROCESS_BOSS_CPU;
+    const label = processName(proc.name, 19);
+    const rss = proc.rssB === undefined ? "-" : fmtBytes(proc.rssB);
+    const value = `${fmtPct(proc.cpuPct).padStart(5)}  ${rss.padStart(6)}  ${Math.round(proc.energyImpact).toString().padStart(6)}`;
+    rows.push([`${i + 1} ${label}`, value, boss ? P.lavaHi : proc.energyImpact > PROCESS_GLOW_ENERGY ? P.accent : P.hudFg]);
+  }
+  const wakeups = top.reduce((sum, proc) => sum + proc.idleWakeupsPerS, 0);
+  rows.push([`TOP ${top.length} WAKEUPS/S`, String(Math.round(wakeups)), P.hudFg]);
+  return rows;
 }

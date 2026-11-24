@@ -6,12 +6,13 @@
  * scale 0.6–1.2 with process rx + tx bytes/s, ordered by a per-PID key so both
  * renderers agree. The graph shows only measured seconds. Labels give the rates.
  */
-import type { NetThroughput } from "../../core/snapshot.ts";
+import type { NetThroughput, Snapshot } from "../../core/snapshot.ts";
 import { mix, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { bevel, ditherGradientV, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
-import { drawCloud, drawHint, drawHud, drawLockedPanel, drawStars, fmtBytes, type DrawCtx } from "../common.ts";
-import { drawNetHistory, drawPacketLanes, type NetSky } from "../net-sky.ts";
+import { TABLE_LABEL_WIDTH, type Row } from "../../ui/table.ts";
+import { drawCloud, drawHint, drawHud, drawLockedPanel, drawStars, fmtBytes, fmtRate, type DrawCtx } from "../common.ts";
+import { NET_HISTORY_SECONDS, NETWORK_CLOUD_LIMIT_HI, drawNetHistory, drawPacketLanes, topNetworkProcs, type NetHistory, type NetSky } from "../net-sky.ts";
 import { processName } from "../process-field.ts";
 
 const SKY = [P.skyTop, mix(P.skyTop, P.skyBot, 0.5), P.skyBot];
@@ -83,4 +84,35 @@ export function drawNetworkZone(f: Frame, ctx: DrawCtx, sky: NetSky, net: NetThr
   f.text(77 - rx.length - tx.length - 2, 22, rx, P.ok, P.hudBg);
   f.text(77 - tx.length, 22, tx, P.accent, P.hudBg);
   drawHint(f, "esc back  q quit", "↓ IN  ↑ OUT  LOG SCALE");
+}
+
+export function tableRows(snap: Snapshot, history?: NetHistory): Row[] {
+  const net = snap.net;
+  if (!net) return [["NETWORK", "NEEDS SUDO", P.dim]];
+  const rows: Row[] = [
+    ["RX BYTES/S", fmtRate(net.rxBps), P.ok],
+    ["TX BYTES/S", fmtRate(net.txBps), P.accent],
+    ["RX PACKETS/S", String(Math.round(net.rxPps)), P.hudFg],
+    ["TX PACKETS/S", String(Math.round(net.txPps)), P.hudFg],
+    ["TOTAL PACKETS/S", String(Math.round(net.rxPps + net.txPps)), P.hudFg],
+  ];
+  if (net.rxBps || net.txBps) {
+    const top = topNetworkProcs(snap.procs, NETWORK_CLOUD_LIMIT_HI);
+    if (top.length) rows.push(["TOP NETWORK PROCESSES", "RX / TX", P.accent]);
+    for (const proc of top) rows.push([processName(proc.name, TABLE_LABEL_WIDTH), ratePair(proc.netRxBps, proc.netTxBps), P.hudFg]);
+  }
+  if (history) {
+    // Same seconds and gaps as the art's chart, newest first.
+    const now = Math.floor(snap.t / 1000);
+    rows.push(["LAST 60 S", "RX / TX", P.accent]);
+    for (let i = NET_HISTORY_SECONDS - 1; i >= 0; i--) {
+      const sample = history.at(i, now);
+      if (sample) rows.push([`${now - sample.second} S AGO`, ratePair(sample.rx, sample.tx), P.hudFg]);
+    }
+  }
+  return rows;
+}
+
+function ratePair(rx: number, tx: number): string {
+  return `↓ ${fmtRate(rx).padStart(7)}  ↑ ${fmtRate(tx).padStart(7)}`;
 }

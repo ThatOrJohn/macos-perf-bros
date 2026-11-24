@@ -3,9 +3,11 @@
  * (wired, app, compressed, cached), pressure lamps on the rim, and an overflow
  * pipe into the underground swap cistern.
  */
+import type { MemoryReading, Snapshot } from "../../core/snapshot.ts";
 import { mix, type Color, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { ditherGradientV } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
+import type { Row } from "../../ui/table.ts";
 import { drawHint, drawHud, drawStars, fmtBytes, hash, pressureColor, type DrawCtx } from "../common.ts";
 
 const GROUND = 34;
@@ -37,7 +39,7 @@ export function drawMemoryZone(f: Frame, ctx: DrawCtx): void {
     return;
   }
   const s = (k: string, v: number) => ctx.sm.get(`mem.${k}`, v, ctx.dt);
-  const appB = Math.max(0, m.usedB - m.wiredB - m.compressedB);
+  const appB = appMemoryB(m);
   const layers: Layer[] = [
     { key: "wired", label: "WIRED", bytes: s("wired", m.wiredB), color: P.wired },
     { key: "app", label: "APP", bytes: s("app", appB), color: P.app },
@@ -119,7 +121,7 @@ export function drawMemoryZone(f: Frame, ctx: DrawCtx): void {
     f.text(4, row, L.label, P.white);
     f.text(4, row + 1, fmtBytes(L.bytes), P.dim);
   });
-  const freeB = Math.max(0, total - m.usedB - m.cachedB);
+  const freeB = freeMemoryB(m);
   f.text(4, 12, "FREE", P.white);
   f.text(4, 13, fmtBytes(freeB), P.dim);
   f.text(1, 14, `USED ${fmtBytes(m.usedB)}`, P.white, undefined, true);
@@ -133,4 +135,22 @@ export function drawMemoryZone(f: Frame, ctx: DrawCtx): void {
 
   drawHud(f, ctx.snap);
   drawHint(f, "esc back  q quit", "tank = all RAM · cistern = swap");
+}
+
+export const appMemoryB = (m: MemoryReading) => Math.max(0, m.usedB - m.wiredB - m.compressedB);
+export const freeMemoryB = (m: MemoryReading) => Math.max(0, m.totalB - m.usedB - m.cachedB);
+
+export function tableRows(snap: Snapshot): Row[] {
+  const m = snap.memory;
+  if (!m) return [["MEMORY", "N/A", P.dim]];
+  return [
+    ["USED", `${fmtBytes(m.usedB)} / ${fmtBytes(m.totalB)}`, P.hudFg],
+    ["WIRED", fmtBytes(m.wiredB), P.hudFg],
+    ["APP", fmtBytes(appMemoryB(m)), P.hudFg],
+    ["COMPRESSED", fmtBytes(m.compressedB), P.hudFg],
+    ["CACHED", fmtBytes(m.cachedB), P.hudFg],
+    ["FREE", fmtBytes(freeMemoryB(m)), P.hudFg],
+    ["PRESSURE", m.pressure.toUpperCase(), pressureColor(m.pressure)],
+    ["SWAP USED", `${fmtBytes(m.swapUsedB)} / ${fmtBytes(m.swapTotalB)}`, P.hudFg],
+  ];
 }

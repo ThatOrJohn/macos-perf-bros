@@ -238,6 +238,76 @@ test("Power Plant shows the GPU foundry, thermal overflow and partial or missing
   }
 });
 
+test("b toggles tables and restores art in every scene, with complete or empty snapshots", () => {
+  const loaded = source.at(8);
+  const empty: Snapshot = { t: loaded.t, privileged: false, topology: loaded.topology, procs: [], uptimeS: 0 };
+  const metrics = ["CPU FORTRESS", "CPU BUSY", "USED", "RX BYTES/S", "READ BYTES/S", "TOP PROCESSES", "PACKAGE POWER"];
+  for (const [i, metric] of metrics.entries()) {
+    for (const snap of [loaded, empty]) {
+      const game = new Game();
+      if (i) game.key(String(i));
+      const art = game.drawHi(snap, 1, 0).get(6, 25);
+      game.key("b");
+      const table = game.draw(snap, 1, 0);
+      expect(table.texts.some(({ row, text }) => row === 3 && text === "METRIC")).toBe(true);
+      if (snap === loaded) expect(table.texts.some(({ text }) => text.includes(metric))).toBe(true);
+      const values = table.texts.filter(({ row, col }) => row >= 5 && row <= 19 && col > 7);
+      expect(values.length).toBeGreaterThan(0);
+      expect(values.every(({ text, col }) => col + text.length === 73)).toBe(true);
+      expect(game.drawHi(snap, 1, 0).get(6, 25)).toBe(P.stoneDark); // table panel bevel
+      game.key("b");
+      expect(game.draw(snap, 1, 0).texts.some(({ text }) => text === "METRIC")).toBe(false);
+      expect(game.drawHi(snap, 1, 0).get(6, 25)).toBe(art);
+    }
+  }
+});
+
+test("table navigation keeps the selected zone and reaches the last CPU core", () => {
+  const snap = source.at(8);
+  const game = new Game();
+  game.key("b");
+  game.key("right");
+  expect(game.draw(snap, 1, 0).texts.some(({ text }) => text === "> 2 MEMORY RESERVOIR")).toBe(true);
+  game.key("enter");
+  expect(game.scene).toBe("mem");
+  expect(game.draw(snap, 2, 0).texts.some(({ text }) => text === "USED")).toBe(true);
+  game.key("escape");
+  expect(game.scene).toBe("overworld");
+  game.key("1");
+  expect(game.scene).toBe("cpu");
+
+  const cpu = snap.cpu!;
+  const big: Snapshot = {
+    ...snap,
+    cpu: { ...cpu, cores: Array.from({ length: 36 }, (_, id) => ({ ...cpu.cores[0]!, id, kind: "P" })) },
+  };
+  const first = game.drawHi(big, 3, 0).px.slice();
+  expect(game.draw(big, 3, 0).texts.some(({ text }) => text === "PAGE 1 / 3")).toBe(true);
+  game.key("pagedown");
+  game.key("pagedown");
+  game.key("pagedown");
+  const end = game.draw(big, 4, 0).texts;
+  expect(end.some(({ text }) => text === "PAGE 3 / 3")).toBe(true);
+  expect(end.some(({ text }) => text === "CORE P35 BUSY")).toBe(true);
+  expect(game.drawHi(big, 4, 0).px).not.toEqual(first);
+  game.key("pageup");
+  expect(game.draw(big, 5, 0).texts.some(({ text }) => text === "PAGE 2 / 3")).toBe(true);
+  expect(game.draw(snap, 6, 0).texts.some(({ text }) => text.startsWith("PAGE"))).toBe(false);
+});
+
+test("Network Sky table keeps measured history and skips unmeasured seconds", () => {
+  const snap = source.at(8);
+  const game = new Game();
+  game.draw({ ...snap, t: 1_000 }, 1, 0);
+  game.key("3");
+  game.key("b");
+  const table = game.draw({ ...snap, t: 3_000 }, 3, 0).texts.map(({ text }) => text);
+  expect(table).toContain("LAST 60 S");
+  expect(table).toContain("0 S AGO");
+  expect(table).toContain("2 S AGO");
+  expect(table).not.toContain("1 S AGO");
+});
+
 test("the Kitty presenter keeps publishing past the image pool's capacity", async () => {
   // Regression: publishRgba's handle was never released, so after 3 frames
   // every publish returned null and the hi-res picture froze.

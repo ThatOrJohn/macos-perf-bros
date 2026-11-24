@@ -6,6 +6,7 @@ import { hash } from "./common.ts";
 
 export const PROCESS_BOSS_CPU = 50;
 export const PROCESS_GLOW_ENERGY = 100;
+export const PROCESS_LIMIT_HI = 12;
 
 const POP_IN_S = 0.20;
 const SHRINK_OUT_S = 0.30;

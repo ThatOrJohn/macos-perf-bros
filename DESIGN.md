@@ -169,6 +169,8 @@ A tile map of zones connected by paths. The player sprite walks between zones wi
 
 ### 7.3 Zones (level view)
 
+`b` toggles a live table in both renderers. On the overworld it summarizes all six zones and highlights the selected one. Inside a zone it shows readings from the same snapshot as the artwork, with separate pages for longer lists such as CPU cores and the measured seconds in Network Sky's history. Navigation keeps the chosen view.
+
 **CPU Fortress**
 - Two wings: the **E-cluster** and the **P-cluster**, drawn with different block tiles.
 - One pillar per core. Pillar height = active residency %.
@@ -224,6 +226,7 @@ Focusing an entity in a zone (with `Tab` or arrow keys) highlights it and shows 
 | `Tab` / `Shift-Tab` | Cycle focus between entities in a zone |
 | `1`–`6` | Jump straight to a zone |
 | `b` | Toggle boring mode (table view) |
+| `PgUp` / `PgDn` | Move between table pages when available |
 | `p` | Pause sampling (freeze frame) |
 | `?` | Help overlay |
 | `q` | Quit |
@@ -301,7 +304,7 @@ Status and task breakdown: [docs/ROADMAP.md](docs/ROADMAP.md).
 1. ✅ **Data:** fixtures, `Snapshot` types, powermetrics parser, memory/topology/ps collectors, FFI CPU fallback, privilege handling, live source, record/replay.
 2. ✅ **Engine:** both renderers, sprites, palette, outlines/dither, pixel font, tweening, HUD, render tests, PNG stills.
 3. ✅ **Overworld:** all six zone tiles driven by data, with navigation and iris transitions.
-4. 🟡 **First zones:** CPU Fortress and Memory Reservoir done; boring mode not started.
+4. ✅ **First zones:** CPU Fortress, Memory Reservoir, and boring mode.
 5. **Remaining zones:** Network Sky, Disk Mines, Process Plains, and Power Plant.
 6. **Entity view:** focus, detail cards, and on-demand detail collectors.
 7. **Later:** the action broker and stomp mechanic.

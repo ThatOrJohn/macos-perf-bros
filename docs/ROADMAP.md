@@ -13,7 +13,8 @@ Read [AGENTS.md](../AGENTS.md) first. Its hard rules and definition of done appl
 | Synthetic scenarios + scenario stills (R1) | ✅ done |
 | Degraded-mode "locked" visuals (R2) | ✅ done. Network Sky, Disk Mines, and Power Plant show the shared locked panel when their readings are unavailable. |
 | Network Sky (R4), Disk Mines (R5), Power Plant (R6) | ✅ done (both renderers) |
-| Boring mode, help/pause | ⬜ not started |
+| Boring mode (R7) | ✅ done (both renderers) |
+| Help/pause | ⬜ not started |
 | Entity focus + detail cards (phase 6) | ⬜ later, needs design review first |
 | Action broker / stomp (phase 7) | 🚫 do not start |
 

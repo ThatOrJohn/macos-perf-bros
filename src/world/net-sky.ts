@@ -7,6 +7,7 @@ import { Smoother } from "../engine/tween.ts";
 import { hash } from "./common.ts";
 
 export const NET_HISTORY_SECONDS = 60;
+export const NETWORK_CLOUD_LIMIT_HI = 5;
 export const netLevel = (bps: number) => Math.min(1, Math.log10(1 + Math.max(0, bps)) / 7);
 export const packetLevel = (pps: number) => Math.min(1, Math.log10(1 + Math.max(0, pps)) / 5);
 
@@ -45,6 +46,12 @@ export class NetHistory {
 
 const totalRate = (p: Proc) => p.netRxBps + p.netTxBps;
 
+export function topNetworkProcs(procs: readonly Proc[], limit: number): Proc[] {
+  return procs.filter((proc) => totalRate(proc) > 0)
+    .sort((a, b) => totalRate(b) - totalRate(a) || a.pid - b.pid)
+    .slice(0, limit);
+}
+
 export interface Cloud {
   proc: Proc;
   /** Stable per-PID order key: clouds sit left to right by key in both renderers. */
@@ -81,9 +88,7 @@ export class CloudSlots {
     const second = tMs === undefined ? NaN : Math.floor(tMs / 1000);
     if (!(second === this.second)) {
       this.second = second;
-      const top = procs.filter((proc) => totalRate(proc) > 0)
-        .sort((a, b) => totalRate(b) - totalRate(a) || a.pid - b.pid)
-        .slice(0, this.limit);
+      const top = topNetworkProcs(procs, this.limit);
       for (const cloud of this.clouds) {
         const proc = top.find(({ pid }) => pid === cloud.proc.pid);
         cloud.departing = proc === undefined;
