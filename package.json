@@ -1,6 +1,33 @@
 {
   "name": "macos-perf-bros",
   "version": "0.0.0",
+  "description": "A terminal system monitor for Apple Silicon Macs, presented as an original NES-style platformer.",
+  "license": "MIT",
+  "author": "John Walley",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ThatOrJohn/macos-perf-bros.git"
+  },
+  "homepage": "https://github.com/ThatOrJohn/macos-perf-bros#readme",
+  "bugs": {
+    "url": "https://github.com/ThatOrJohn/macos-perf-bros/issues"
+  },
+  "keywords": [
+    "macos",
+    "apple-silicon",
+    "system-monitor",
+    "tui",
+    "terminal",
+    "bun",
+    "opentui",
+    "powermetrics"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
   "private": true,
   "type": "module",
   "bin": {
