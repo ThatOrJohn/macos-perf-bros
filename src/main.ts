@@ -111,7 +111,7 @@ if (args.png) {
       { name: "3-cpu-idle", keys: ["return"], t: 2.5 },
       { name: "4-cpu-load", keys: ["return"], t: 8.5 },
       { name: "5-memory", keys: ["right", "return"], t: 2.5 },
-      { name: "6-placeholder", keys: ["6"], t: 2.5 },
+      { name: "6-power", keys: ["6"], t: 8.5 },
       { name: "7-process", keys: ["5"], t: 8.5 },
       { name: "8-network", keys: ["3"], t: 8.5 },
       { name: "9-disk", keys: ["4"], t: 8.5 },

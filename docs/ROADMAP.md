@@ -11,9 +11,8 @@ Read [AGENTS.md](../AGENTS.md) first. Its hard rules and definition of done appl
 | Overworld: all six live tiles, navigation, iris transitions | ✅ done |
 | CPU Fortress, Memory Reservoir, Process Plains (R3) | ✅ done (both renderers) |
 | Synthetic scenarios + scenario stills (R1) | ✅ done |
-| Degraded-mode "locked" visuals (R2) | ✅ done. Locked zones use the placeholder scene with the locked panel; R4–R6 call `drawLockedPanel` / `drawLockedPanelHi` themselves |
-| Network Sky (R4), Disk Mines (R5) | ✅ done (both renderers) |
-| Power Plant | ⬜ placeholder "under construction" scene |
+| Degraded-mode "locked" visuals (R2) | ✅ done. Network Sky, Disk Mines, and Power Plant show the shared locked panel when their readings are unavailable. |
+| Network Sky (R4), Disk Mines (R5), Power Plant (R6) | ✅ done (both renderers) |
 | Boring mode, help/pause | ⬜ not started |
 | Entity focus + detail cards (phase 6) | ⬜ later, needs design review first |
 | Action broker / stomp (phase 7) | 🚫 do not start |
@@ -139,7 +138,7 @@ Good first tasks for an agent: R1, R2, R8. The zone tasks (R3–R6) are the main
 
 ### Locked
 
-When `zoneLocked("net", snap)` is true, draw the scene backdrop plus `drawLockedPanel(f)` / `drawLockedPanelHi(cv)`, then the HUD and hint, and **nothing else**: no streaks, clouds or history. Model it on `drawPlaceholderZone(…, locked = true)`.
+When `zoneLocked("net", snap)` is true, draw the scene backdrop plus `drawLockedPanel(f)` / `drawLockedPanelHi(cv)`, then the HUD and hint, and **nothing else**: no streaks, clouds or history.
 
 ### Metric → visual mapping
 

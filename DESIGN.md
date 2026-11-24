@@ -199,9 +199,10 @@ A tile map of zones connected by paths. The player sprite walks between zones wi
 - Slime labels show rank, CPU, and RSS. The leaderboard shows the top eight names in hi-res and five in half-block, plus idle wakeups per second summed across the displayed slimes.
 
 **Power Plant**
-- Three generators: CPU, GPU, and ANE. Turbine speed = watts.
-- Lava level at the base = thermal pressure state.
-- The GPU foundry lives here too: furnace brightness = GPU active %, with frequency shown as a gauge.
+- The CPU, GPU, and ANE turbines spin at 0.065 turns per second per watt up to 20 W, with individual watt readings. The package display changes from green to gold at 10 W and red at 20 W.
+- GPU active percentage controls the foundry's flame height and brightness. The adjacent gauge shows the current clock as a fraction of its maximum, with both frequencies in MHz.
+- Nominal, moderate, heavy, and critical thermal pressure fill the floor channel to 20%, 45%, 75%, and 100%. Higher pressure increases brightness and bubble speed. At critical pressure the lava spills over the rim and the throttling sign blinks.
+- Missing power data shows the locked panel. Missing GPU or thermal readings are marked unavailable in an otherwise active scene.
 
 ### 7.4 Entity view
 

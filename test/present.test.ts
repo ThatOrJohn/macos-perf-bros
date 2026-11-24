@@ -212,6 +212,32 @@ test("Disk Mines shows carts, rates and miners under load, and handles idle and 
   }
 });
 
+test("Power Plant shows the GPU foundry, thermal overflow and partial or missing readings", async () => {
+  const [busy, idle, degraded] = await Promise.all(
+    ["gpu-busy", "idle", "degraded"].map(async (name) => (await loadNdjsonReplay(`${scenarioDir}/${name}.ndjson`)).at(10)),
+  );
+  const fixtures = [
+    { snap: busy!, labels: ["14.8 W", "BUSY 95%"], gpuFill: true, spilled: false },
+    { snap: idle!, labels: ["THERMAL NOMINAL"], gpuFill: false, spilled: false },
+    { snap: { ...busy!, thermal: "critical" as const }, labels: ["⚠ THROTTLING"], gpuFill: true, spilled: true },
+    { snap: { ...busy!, gpu: undefined, thermal: undefined }, labels: ["BUSY N/A", "THERMAL N/A"], gpuFill: false, spilled: false },
+    { snap: degraded!, labels: ["NEEDS SUDO"], gpuFill: false, spilled: false },
+  ];
+  for (const { snap, labels, gpuFill, spilled } of fixtures) {
+    const game = new Game();
+    game.key("6");
+    expect(game.scene).toBe("power");
+    const frame = game.draw(snap, 1, 0.3);
+    const hi = game.drawHi(snap, 1, 0.3);
+    expect(frame.texts.some(({ row, text }) => row === 1 && text === "POWER PLANT")).toBe(true);
+    for (const label of labels) expect(frame.texts.some(({ text }) => text.includes(label))).toBe(true);
+    expect(frame.canvas.get(73, 21) === P.eBrick).toBe(gpuFill);
+    expect(hi.get(282, 84) === P.eBrick).toBe(gpuFill);
+    expect(frame.canvas.get(2, 37) === P.lava).toBe(spilled);
+    expect(hi.get(10, 164) === P.lava).toBe(spilled);
+  }
+});
+
 test("the Kitty presenter keeps publishing past the image pool's capacity", async () => {
   // Regression: publishRgba's handle was never released, so after 3 frames
   // every publish returned null and the hi-res picture froze.
