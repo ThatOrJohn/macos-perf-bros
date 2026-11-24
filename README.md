@@ -26,7 +26,7 @@ perf-bros --help          # all options
 
 From the repo, `bun start` and `bun run demo` do the same without linking.
 
-The best way to view it is Ghostty, Kitty or WezTerm, which get real pixel graphics (320×192). Other terminals get a half-block version. Needs at least 80×24.
+The best way to view it is [Ghostty](https://ghostty.org), [Kitty](https://sw.kovidgoyal.net/kitty/) or [WezTerm](https://wezterm.org), which get real pixel graphics (320×192). Other terminals get a half-block version. Needs at least 80×24.
 
 Keys: arrows or `hjkl` move · `⏎` enter · `Esc` back · `1`–`6` jump to a zone · `b` toggle table view · `PgUp` / `PgDn` change table page · `p` pause or resume metrics · `?` open or close help · `r` toggle renderer · `q` quit.
 
