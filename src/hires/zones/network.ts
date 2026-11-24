@@ -12,7 +12,7 @@ import { drawText, drawTextCentered, drawTextRight, textWidth } from "../../engi
 import { bevel, glow, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
 import { fmtBytes, type DrawCtx } from "../../world/common.ts";
-import { drawNetHistory, drawPacketLanes, type NetSky } from "../../world/net-sky.ts";
+import { drawNetHistory, drawPacketLanes, type NetHistory, type NetSky } from "../../world/net-sky.ts";
 import { processName } from "../../world/process-field.ts";
 import { W, X, drawCloudHi, drawHintHi, drawHudHi, drawLockedPanelHi, drawMastHi, drawNightSky } from "../common.ts";
 
@@ -56,7 +56,7 @@ function drawRadio(cv: PixelCanvas, packets: number, beacon: boolean): void {
   drawTextCentered(cv, center, 133, value, P.white);
 }
 
-export function drawNetworkZoneHi(cv: PixelCanvas, ctx: DrawCtx, sky: NetSky, net: NetThroughput | undefined): void {
+export function drawNetworkZoneHi(cv: PixelCanvas, ctx: DrawCtx, sky: NetSky, history: NetHistory, net: NetThroughput | undefined): void {
   drawNightSky(cv, 11, 181, ctx.t, false);
   drawTextCentered(cv, W / 2, 14, "NETWORK SKY", P.accent, SHADOW);
   drawHudHi(cv, ctx.snap);
@@ -78,7 +78,7 @@ export function drawNetworkZoneHi(cv: PixelCanvas, ctx: DrawCtx, sky: NetSky, ne
   drawRadio(cv, net.rxPps + net.txPps, sky.beacon);
   bevel(cv, 4, 154, 312, 25, P.hudBg, P.stoneDeep, P.stoneDeep);
   drawText(cv, 9, 163, "60S", P.dim);
-  drawNetHistory(cv, sky.history, Math.floor(ctx.snap.t / 1000), 32, 237, 174, 15);
+  drawNetHistory(cv, history, Math.floor(ctx.snap.t / 1000), 32, 237, 174, 15);
   drawTextRight(cv, 311, 157, rx, P.ok);
   drawTextRight(cv, 311, 168, tx, P.accent);
   drawHintHi(cv, "ESC BACK  Q QUIT", "↓ IN  ↑ OUT  LOG SCALE");

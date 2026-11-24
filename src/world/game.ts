@@ -3,7 +3,7 @@
  * Renderer-agnostic: draws into a Frame.
  */
 import { Frame, PixelCanvas } from "../engine/canvas.ts";
-import { H as HI_H, W as HI_W, irisHi } from "../hires/common.ts";
+import { H as HI_H, W as HI_W, drawHelpPanelHi, drawHudHi, irisHi } from "../hires/common.ts";
 import { drawOverworldHi, hiPos } from "../hires/overworld.ts";
 import { drawTableHi } from "../hires/table.ts";
 import { drawCpuZoneHi } from "../hires/zones/cpu.ts";
@@ -16,7 +16,7 @@ import { P } from "../engine/palette.ts";
 import { Smoother } from "../engine/tween.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { drawTable, pageCount, type Row } from "../ui/table.ts";
-import type { DrawCtx } from "./common.ts";
+import { drawHelpPanel, drawHud, type DrawCtx } from "./common.ts";
 import { DiskMines } from "./disk-mines.ts";
 import { ZONES, ZONE_ORDER, drawOverworld, neighbor, newOverworldState, stepPlayer, tableRows as overworldRows, type ZoneId } from "./overworld.ts";
 import { NETWORK_CLOUD_LIMIT_HI, NetHistory, NetSky } from "./net-sky.ts";
@@ -50,8 +50,12 @@ export class Game {
   // One throughput history for both renderers, recorded every frame in every
   // scene, so Network Sky's 60 s graph is complete when you walk in.
   private readonly netHistory = new NetHistory();
-  private readonly netSky = new NetSky(this.netHistory, 4, 6, 18);
-  private readonly netSkyHi = new NetSky(this.netHistory, NETWORK_CLOUD_LIMIT_HI, 14, 60);
+  private readonly netSky = new NetSky(4, 6, 18);
+  private readonly netSkyHi = new NetSky(NETWORK_CLOUD_LIMIT_HI, 14, 60);
+  private displayedSnap: Snapshot | undefined;
+  private pausedHistory: NetHistory | undefined;
+  private paused = false;
+  private help = false;
   private boring = false;
   private tablePage = 0;
   private tablePages = 1;
@@ -71,6 +75,19 @@ export class Game {
   /** Returns "quit" when the app should exit. */
   key(name: string): "quit" | undefined {
     if (name === "q") return "quit";
+    if (name === "p") {
+      this.paused = !this.paused;
+      if (this.paused && this.displayedSnap) this.pausedHistory ??= this.netHistory.copy();
+      return;
+    }
+    if (name === "?") {
+      this.help = !this.help;
+      return;
+    }
+    if (this.help) {
+      if (name === "escape" || name === "backspace") this.help = false;
+      return;
+    }
     if (name === "b") {
       this.boring = !this.boring;
       this.irisStart = -Infinity;
@@ -125,7 +142,7 @@ export class Game {
       case "overworld": return overworldRows(snap, this.ow.selected);
       case "cpu": return cpuRows(snap);
       case "mem": return memoryRows(snap);
-      case "net": return networkRows(snap, this.netHistory);
+      case "net": return networkRows(snap, this.displayedHistory);
       case "disk": return diskRows(snap);
       case "proc": return processRows(snap);
       case "power": return powerRows(snap);
@@ -140,9 +157,18 @@ export class Game {
     return { title, rows, page: this.tablePage };
   }
 
-  /** Feed scene-independent history (once per snapshot second; cheap otherwise). */
-  private record(snap: Snapshot): void {
+  private get displayedHistory(): NetHistory {
+    return this.pausedHistory ?? this.netHistory;
+  }
+
+  /** Continue recording live history even when the display is frozen. */
+  private displaySnapshot(snap: Snapshot): Snapshot {
     if (snap.net) this.netHistory.record(snap.t, snap.net.rxBps, snap.net.txBps);
+    if (!this.paused || !this.displayedSnap) {
+      this.displayedSnap = snap;
+      this.pausedHistory = this.paused ? this.netHistory.copy() : undefined;
+    }
+    return this.displayedSnap;
   }
 
   /** Advance animation state once per frame (shared by both renderers). */
@@ -152,55 +178,64 @@ export class Game {
   }
 
   /** Low-res (80×46 half-block) frame. */
-  draw(snap: Snapshot, t: number, dt: number): Frame {
+  draw(live: Snapshot, t: number, dt: number): Frame {
     this.tick(t, dt);
-    this.record(snap);
+    const snap = this.displaySnapshot(live);
     const f = this.frame.reset();
     if (this.boring) {
       const { title, rows, page } = this.currentTable(snap);
       drawTable(f, snap, title, rows, page);
-      return f;
+    } else {
+      const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
+      switch (this.scene) {
+        case "overworld": drawOverworld(f, ctx, this.ow); break;
+        case "cpu": drawCpuZone(f, ctx); break;
+        case "mem": drawMemoryZone(f, ctx); break;
+        case "net": drawNetworkZone(f, ctx, this.netSky, this.displayedHistory, snap.net); break;
+        case "disk": drawDiskZone(f, ctx, this.diskMines); break;
+        case "proc": drawProcessZone(f, ctx, this.processField); break;
+        case "power": drawPowerZone(f, ctx, this.powerPlant); break;
+      }
+      this.iris(f, t);
     }
-    const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
-    switch (this.scene) {
-      case "overworld": drawOverworld(f, ctx, this.ow); break;
-      case "cpu": drawCpuZone(f, ctx); break;
-      case "mem": drawMemoryZone(f, ctx); break;
-      case "net": drawNetworkZone(f, ctx, this.netSky, snap.net); break;
-      case "disk": drawDiskZone(f, ctx, this.diskMines); break;
-      case "proc": drawProcessZone(f, ctx, this.processField); break;
-      case "power": drawPowerZone(f, ctx, this.powerPlant); break;
+    if (this.paused) {
+      let kept = 0;
+      for (const run of f.texts) if (run.row !== 0) f.texts[kept++] = run;
+      f.texts.length = kept;
+      drawHud(f, snap, true);
     }
-    this.iris(f, t);
+    if (this.help) drawHelpPanel(f, this.scene);
     return f;
   }
 
   /** Hi-res (320×192) frame for pixel-image terminals. */
-  drawHi(snap: Snapshot, t: number, dt: number): PixelCanvas {
+  drawHi(live: Snapshot, t: number, dt: number): PixelCanvas {
     this.tick(t, dt);
-    this.record(snap);
+    const snap = this.displaySnapshot(live);
     const cv = this.canvasHi;
     if (this.boring) {
       const { title, rows, page } = this.currentTable(snap);
       drawTableHi(cv, snap, title, rows, page);
-      return cv;
+    } else {
+      cv.px.fill(0);
+      const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
+      switch (this.scene) {
+        case "overworld": drawOverworldHi(cv, ctx, this.ow); break;
+        case "cpu": drawCpuZoneHi(cv, ctx); break;
+        case "mem": drawMemoryZoneHi(cv, ctx); break;
+        case "net": drawNetworkZoneHi(cv, ctx, this.netSkyHi, this.displayedHistory, snap.net); break;
+        case "disk": drawDiskZoneHi(cv, ctx, this.diskMinesHi); break;
+        case "proc": drawProcessZoneHi(cv, ctx, this.processFieldHi); break;
+        case "power": drawPowerZoneHi(cv, ctx, this.powerPlantHi); break;
+      }
+      const k = (t - this.irisStart) / IRIS_S;
+      if (k >= 0 && k < 1) {
+        const c = hiPos(this.irisCenter);
+        irisHi(cv, c.x, c.y - 20, k);
+      }
     }
-    cv.px.fill(0);
-    const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
-    switch (this.scene) {
-      case "overworld": drawOverworldHi(cv, ctx, this.ow); break;
-      case "cpu": drawCpuZoneHi(cv, ctx); break;
-      case "mem": drawMemoryZoneHi(cv, ctx); break;
-      case "net": drawNetworkZoneHi(cv, ctx, this.netSkyHi, snap.net); break;
-      case "disk": drawDiskZoneHi(cv, ctx, this.diskMinesHi); break;
-      case "proc": drawProcessZoneHi(cv, ctx, this.processFieldHi); break;
-      case "power": drawPowerZoneHi(cv, ctx, this.powerPlantHi); break;
-    }
-    const k = (t - this.irisStart) / IRIS_S;
-    if (k >= 0 && k < 1) {
-      const c = hiPos(this.irisCenter);
-      irisHi(cv, c.x, c.y - 20, k);
-    }
+    if (this.paused) drawHudHi(cv, snap, true);
+    if (this.help) drawHelpPanelHi(cv, this.scene);
     return cv;
   }
 

@@ -8,7 +8,9 @@ import { P } from "../engine/palette.ts";
 import { stamped } from "../engine/stamp.ts";
 import { bayer, bevel, blitOutlined, disc, dither, ditherGradientV, glow, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
+import { HELP_KEYS, HELP_METAPHOR } from "../ui/help.ts";
 import { HUD_PRI, cpuTotalPct, fitByPriority, fmtBytes, fmtPct, fmtUptime, hash, pressureColor, thermalColor } from "../world/common.ts";
+import type { Scene } from "../world/game.ts";
 
 export const W = 320;
 export const H = 192;
@@ -227,7 +229,7 @@ export const ICON = {
 
 // ---------------------------------------------------------------- HUD + hint
 
-export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
+export function drawHudHi(cv: PixelCanvas, snap: Snapshot, paused = false): void {
   cv.rect(0, 0, W, HUD_H, P.hudBg);
   cv.hline(0, W - 1, HUD_H - 1, P.stoneDeep);
   const cpu = cpuTotalPct(snap);
@@ -246,8 +248,9 @@ export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
   items.push(snap.battery
     ? { icon: ICON.heart, text: `${Math.round(snap.battery.pct)}%`, color: P.hudFg, pri: HUD_PRI.battery }
     : { icon: ICON.plug, text: "AC", color: P.hudFg, pri: HUD_PRI.battery });
-  // Right-aligned: NO SUDO tag (without sudo) and uptime.
+  // Status tags and uptime sit at the right.
   if (!snap.privileged) items.push({ text: "NO SUDO", color: P.warn, pri: HUD_PRI.nosudo, right: true });
+  if (paused) items.push({ text: "PAUSED", color: P.accent, pri: HUD_PRI.paused, right: true });
   items.push({ text: fmtUptime(snap.uptimeS), color: P.dim, pri: HUD_PRI.uptime, right: true });
 
   // Icon items take 9 + text + 7 px; right items take text + 8. When full, the least important drop.
@@ -263,6 +266,17 @@ export function drawHudHi(cv: PixelCanvas, snap: Snapshot): void {
     drawTextRight(cv, r, 2, it.text, it.color);
     r -= textWidth(it.text) + 8;
   }
+}
+
+export function drawHelpPanelHi(cv: PixelCanvas, scene: Scene): void {
+  bevel(cv, 18, 31, W - 36, 132, P.hudBg, P.stoneLight, X.outline);
+  drawTextCentered(cv, W / 2, 38, "HELP", P.accent);
+  for (const [i, [key, action]] of HELP_KEYS.entries()) {
+    drawText(cv, 32, 53 + i * 9, key, P.accent);
+    drawText(cv, 132, 53 + i * 9, action, P.hudFg);
+  }
+  cv.hline(19, W - 20, 145, P.stoneDeep);
+  drawTextCentered(cv, W / 2, 151, HELP_METAPHOR[scene], P.hudFg);
 }
 
 /**

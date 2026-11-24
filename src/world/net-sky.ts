@@ -42,6 +42,14 @@ export class NetHistory {
     const sample = this.samples[mod(wanted, NET_HISTORY_SECONDS)]!;
     return sample.second === wanted ? sample : undefined;
   }
+
+  /** Keep the displayed samples available while the live buffer rolls on. */
+  copy(): NetHistory {
+    const copy = new NetHistory();
+    copy.latest = this.latest;
+    for (const [i, sample] of this.samples.entries()) Object.assign(copy.samples[i]!, sample);
+    return copy;
+  }
 }
 
 const totalRate = (p: Proc) => p.netRxBps + p.netTxBps;
@@ -136,7 +144,7 @@ export class NetSky {
   private clock: number | undefined;
   private beaconPhase = 0;
 
-  constructor(readonly history: NetHistory, cloudLimit: number, private readonly streakLimit: number, private readonly baseSpeed: number) {
+  constructor(cloudLimit: number, private readonly streakLimit: number, private readonly baseSpeed: number) {
     this.clouds = new CloudSlots(cloudLimit);
   }
 
