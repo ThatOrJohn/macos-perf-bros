@@ -12,7 +12,8 @@ Read [AGENTS.md](../AGENTS.md) first. Its hard rules and definition of done appl
 | CPU Fortress, Memory Reservoir, Process Plains (R3) | ✅ done (both renderers) |
 | Synthetic scenarios + scenario stills (R1) | ✅ done |
 | Degraded-mode "locked" visuals (R2) | ✅ done. Locked zones use the placeholder scene with the locked panel; R4–R6 call `drawLockedPanel` / `drawLockedPanelHi` themselves |
-| Network Sky, Disk Mines, Power Plant | ⬜ placeholder "under construction" scenes |
+| Network Sky (R4), Disk Mines (R5) | ✅ done (both renderers) |
+| Power Plant | ⬜ placeholder "under construction" scene |
 | Boring mode, help/pause | ⬜ not started |
 | Entity focus + detail cards (phase 6) | ⬜ later, needs design review first |
 | Action broker / stomp (phase 7) | 🚫 do not start |

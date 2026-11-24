@@ -4,6 +4,7 @@ import { loadNdjsonReplay } from "../src/core/recorder.ts";
 import { loadFixtureReplay } from "../src/core/replay.ts";
 import type { Snapshot } from "../src/core/snapshot.ts";
 import { P } from "../src/engine/palette.ts";
+import { X } from "../src/hires/common.ts";
 import { PixelView } from "../src/engine/present-opentui.ts";
 import { Game } from "../src/world/game.ts";
 import { ZONE_ORDER } from "../src/world/overworld.ts";
@@ -182,6 +183,32 @@ test("Network Sky renders traffic, idle, degraded and empty process snapshots in
     expect(frame.texts.some(({ text }) => text === label)).toBe(true);
     expect(frame.canvas.px.includes(P.cloud)).toBe(clouds);
     expect(canvas.px.includes(P.cloud)).toBe(clouds);
+  }
+});
+
+test("Disk Mines shows carts, rates and miners under load, and handles idle and missing disk data", async () => {
+  const [thrash, idle, degraded] = await Promise.all(
+    ["disk-thrash", "idle", "degraded"].map(async (name) => (await loadNdjsonReplay(`${scenarioDir}/${name}.ndjson`)).at(10)),
+  );
+  const cases = [
+    { snap: thrash!, label: "17000 OPS/S", miner: "mdworker_shared", carts: true },
+    { snap: { ...thrash!, procs: [] }, label: "NO PROCESS I/O", carts: true },
+    { snap: idle!, label: "READ ↑ 0B/s", carts: false },
+    { snap: degraded!, label: "NEEDS SUDO", carts: false },
+  ];
+  for (const { snap, label, miner, carts } of cases) {
+    const game = new Game();
+    game.key("4");
+    expect(game.scene).toBe("disk");
+    const frame = game.draw(snap, 1, 0.3);
+    const hi = game.drawHi(snap, 1, 0.3);
+    expect(frame.texts.some(({ row, text }) => row === 1 && text === "DISK MINES")).toBe(true);
+    expect(frame.texts.some(({ text }) => text.includes(label))).toBe(true);
+    expect(frame.canvas.px.includes(P.waterHi)).toBe(carts);
+    expect(hi.px.includes(X.gem2)).toBe(carts);
+    expect(frame.canvas.px.includes(P.bodyTeal)).toBe(Boolean(miner));
+    expect(hi.px.includes(P.bodyTeal)).toBe(Boolean(miner));
+    if (miner) expect(frame.texts.some(({ row, text }) => row === 21 && text === miner)).toBe(true);
   }
 });
 
