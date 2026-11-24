@@ -3,6 +3,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { loadNdjsonReplay } from "../src/core/recorder.ts";
 import { loadFixtureReplay } from "../src/core/replay.ts";
 import type { Snapshot } from "../src/core/snapshot.ts";
+import { mix } from "../src/engine/canvas.ts";
 import { P } from "../src/engine/palette.ts";
 import { X } from "../src/hires/common.ts";
 import { HELP_KEYS, HELP_METAPHOR } from "../src/ui/help.ts";
@@ -33,6 +34,32 @@ test("overworld renders HUD, half-block pixels and hint line at 80×24", async (
   expect(lines[0]).toContain("GPU");
   expect(lines[5]).toContain("▀");
   expect(lines[23]).toContain("CPU FORTRESS");
+});
+
+test("cached overworld art follows live metrics and locks across empty snapshots", () => {
+  const live = source.at(8);
+  const empty: Snapshot = {
+    topology: live.topology, procs: [], t: live.t, privileged: false, uptimeS: live.uptimeS,
+  };
+  const lo = new Game();
+  const hi = new Game();
+  const checks = (snap: Snapshot, t: number, locked: boolean) => {
+    const frame = lo.draw(snap, t, 2);
+    const canvas = hi.drawHi(snap, t, 2);
+
+    // The gauge fills inside the same tank, even after switching to empty data.
+    expect(frame.canvas.get(37, 26)).toBe(locked ? P.stoneDeep : P.app);
+    expect(canvas.get(151, 72)).toBe(locked ? mix(X.outline, P.wired, 0.4) : P.app);
+
+    // These checker cells over the cloud and chimney are dimmed only while locked.
+    expect(frame.canvas.get(35, 8)).toBe(locked ? P.stoneDeep : P.cloud);
+    expect(canvas.get(285, 54)).toBe(locked ? X.sky1 : P.crit);
+    expect(frame.texts.some(({ text }) => text === "PWR —")).toBe(locked);
+  };
+
+  checks(live, 0.4, false);
+  checks(empty, 1, true);
+  checks(live, 2, false);
 });
 
 test("every zone renders without throwing", async () => {

@@ -319,7 +319,18 @@ Measured with `bun run demo` in the Claude terminal panel: process CPU over 60 s
 | blocks | 17.6% | 5.3% |
 | kitty | 18.9% | ~~5.9%~~ invalid; see below |
 
-**Correction (Kitty):** the 5.9% figure was measured while the Kitty presenter was frozen. It leaked pool handles, so it stopped sending frames after the third. With that fixed, Kitty also needed zlib transport, and static backdrops are now cached (`src/engine/stamp.ts`). Measured in a pty at 5 fps idle: blocks about 6%, Kitty about 9–10% (pre-scale ×2: 9.9%, ×1: 8.6%, ×3: 12.4%). Kitty is still over the 5% budget. The remaining cost is per-frame drawing of the overworld's outlined structures, paths and cloud blobs, much of which is static and could be cached by splitting each structure into static and metric-driven layers.
+**Correction (Kitty):** the 5.9% figure was measured while the Kitty presenter was frozen. It leaked pool handles, so it stopped sending frames after the third. With that fixed, Kitty also needed zlib transport, and static backdrops are now cached (`src/engine/stamp.ts`). Measured in a pty at 5 fps idle: blocks about 6%, Kitty about 9–10% (pre-scale ×2: 9.9%, ×1: 8.6%, ×3: 12.4%).
+
+**Overworld draw follow-up.** Both renderers cache static map art as cropped pixel layers, including paths and clouds. Hi-res also reuses the larger outlined structure shells. Smoke, glows, and alerts still compose at their original depth, and locked tiles dim the pixels changed by their draw. All 136 regenerated PNGs were byte-identical to the baseline, and 13,080 rendered frames matched during demo, scenario, and missing-data replays.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Hi-res overworld draw | 0.69 ms | 0.28 ms |
+| Half-block overworld draw | 0.13 ms | 0.07 ms |
+| Kitty idle CPU at ×2 | 8.12% | 6.99% |
+| Half-block idle CPU | 5.08% | 5.00% |
+
+Draw times are medians of nine `bun run bench:render` runs per revision, alternating which revision ran first. Idle CPU is one 60-second `ps` measurement per revision and renderer from `bun run demo` at 5 fps in a 100×30 pty. Both draw paths meet the per-frame budgets. Kitty remains above the ~5% idle CPU target.
 
 **Budget:** the maintainer accepted ~5% at 5 fps idle (2026-11-23). The original 3% target would have needed about 2 fps idle, since a bare OpenTUI app costs about 1.0% fixed plus 0.26% per fps. AGENTS.md rule 7 and DESIGN.md now say 5%.
 
