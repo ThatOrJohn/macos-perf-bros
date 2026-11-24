@@ -15,6 +15,12 @@ export function diskRate(proc: Proc): number {
   return proc.diskReadBps + proc.diskWriteBps;
 }
 
+export function topDiskProcs(procs: readonly Proc[]): Proc[] {
+  return procs.filter((proc) => diskRate(proc) > 0)
+    .sort((a, b) => diskRate(b) - diskRate(a) || a.pid - b.pid)
+    .slice(0, MAX_MINERS);
+}
+
 class MineRail {
   count = 0;
   private travel = 0;
@@ -65,9 +71,7 @@ export class DiskMines {
 
     if (ctx.snap.procs !== this.procs) {
       this.procs = ctx.snap.procs;
-      const ranked = this.procs.filter((proc) => diskRate(proc) > 0)
-        .sort((a, b) => diskRate(b) - diskRate(a) || a.pid - b.pid)
-        .slice(0, MAX_MINERS);
+      const ranked = topDiskProcs(this.procs);
       this.miners = ranked.map((proc) => {
         const miner = this.miners.find((candidate) => candidate.proc.pid === proc.pid);
         if (miner) {

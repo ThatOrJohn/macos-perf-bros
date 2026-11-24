@@ -7,8 +7,10 @@
 import { mix, type Color, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { ditherGradientV, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
-import { drawHint, drawHud, drawStars, fmtPct, hash, type DrawCtx } from "../common.ts";
-import type { CoreKind, CpuCluster, CpuCore } from "../../core/snapshot.ts";
+import type { Row } from "../../ui/table.ts";
+import { cpuTotalPct, drawHint, drawHud, drawStars, fmtPct, hash, type DrawCtx } from "../common.ts";
+import { fmtWatts } from "../power-plant.ts";
+import type { CoreKind, CpuCluster, CpuCore, Snapshot } from "../../core/snapshot.ts";
 
 const FLOOR = 38;      // first floor pixel row
 const MAX_H = 25;      // tallest pillar
@@ -143,4 +145,24 @@ export function drawCpuZone(f: Frame, ctx: DrawCtx): void {
   drawHud(f, ctx.snap);
   const pw = ctx.snap.power;
   drawHint(f, "esc back  q quit", pw ? `CPU ${pw.cpuW.toFixed(1)}W  ANE ${pw.aneW.toFixed(1)}W` : "");
+}
+
+export function tableRows(snap: Snapshot): Row[] {
+  const cpu = snap.cpu;
+  const rows: Row[] = [cpu?.cores.length ? ["CPU BUSY", fmtPct(cpuTotalPct(snap)), P.hudFg] : ["CPU BUSY", "N/A", P.dim]];
+  for (const [kind, group] of [["E", "EFFICIENCY"], ["P", "PERFORMANCE"]] as const) {
+    const cluster = cpu?.clusters.find((cl) => cl.kind === kind);
+    const cores = cpu?.cores.filter((core) => core.kind === kind) ?? [];
+    if (!cluster && !cores.length) continue;
+    const freq = cluster?.maxFreqMHz ? `${Math.round(cluster.freqMHz)}/${cluster.maxFreqMHz} MHZ` : "N/A";
+    rows.push([`${group} CLOCK`, freq, freq === "N/A" ? P.dim : P.hudFg]);
+    if (cluster) rows.push([`${group} BUSY`, fmtPct(cluster.activePct), P.hudFg]);
+    for (const [i, core] of cores.entries()) {
+      rows.push([`CORE ${kind}${i} BUSY`, fmtPct(core.activePct), core.activePct > 85 ? P.lavaHi : P.hudFg]);
+    }
+  }
+  if (snap.power) {
+    rows.push(["CPU POWER", fmtWatts(snap.power.cpuW), P.hudFg], ["ANE POWER", fmtWatts(snap.power.aneW), P.hudFg]);
+  }
+  return rows;
 }

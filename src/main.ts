@@ -68,7 +68,7 @@ if (args.help) {
   perf-bros --scale N        fixed pre-scale for kitty/sixel
   perf-bros --sudoers        print a sudoers rule so powermetrics needs no password
 
-Keys: arrows/hjkl move · enter · esc back · 1-6 jump · r renderer · q quit`);
+Keys: arrows/hjkl move · enter · esc back · 1-6 jump · b table · PgUp/PgDn page · r renderer · q quit`);
   process.exit(0);
 }
 
@@ -115,6 +115,8 @@ if (args.png) {
       { name: "7-process", keys: ["5"], t: 8.5 },
       { name: "8-network", keys: ["3"], t: 8.5 },
       { name: "9-disk", keys: ["4"], t: 8.5 },
+      { name: "table-overworld", keys: ["b"], t: 8.5 },
+      ...ZONE_ORDER.map((name, i) => ({ name: `table-${name}`, keys: [String(i + 1), "b"], t: 8.5 })),
     ];
     await renderStills(args.png, await openReplay(args.replay ?? FIXTURE), shots);
   }

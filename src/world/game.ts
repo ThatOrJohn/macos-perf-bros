@@ -5,27 +5,29 @@
 import { Frame, PixelCanvas } from "../engine/canvas.ts";
 import { H as HI_H, W as HI_W, irisHi } from "../hires/common.ts";
 import { drawOverworldHi, hiPos } from "../hires/overworld.ts";
+import { drawTableHi } from "../hires/table.ts";
 import { drawCpuZoneHi } from "../hires/zones/cpu.ts";
 import { drawDiskZoneHi } from "../hires/zones/disk.ts";
 import { drawMemoryZoneHi } from "../hires/zones/memory.ts";
 import { drawNetworkZoneHi } from "../hires/zones/network.ts";
 import { drawPowerZoneHi } from "../hires/zones/power.ts";
-import { PROCESS_LIMIT_HI, drawProcessZoneHi } from "../hires/zones/process.ts";
+import { drawProcessZoneHi } from "../hires/zones/process.ts";
 import { P } from "../engine/palette.ts";
 import { Smoother } from "../engine/tween.ts";
 import type { Snapshot } from "../core/snapshot.ts";
+import { drawTable, pageCount, type Row } from "../ui/table.ts";
 import type { DrawCtx } from "./common.ts";
 import { DiskMines } from "./disk-mines.ts";
-import { ZONES, ZONE_ORDER, drawOverworld, neighbor, newOverworldState, stepPlayer, type ZoneId } from "./overworld.ts";
-import { NetHistory, NetSky } from "./net-sky.ts";
+import { ZONES, ZONE_ORDER, drawOverworld, neighbor, newOverworldState, stepPlayer, tableRows as overworldRows, type ZoneId } from "./overworld.ts";
+import { NETWORK_CLOUD_LIMIT_HI, NetHistory, NetSky } from "./net-sky.ts";
 import { PowerPlant } from "./power-plant.ts";
-import { ProcessField } from "./process-field.ts";
-import { drawCpuZone } from "./zones/cpu.ts";
-import { drawDiskZone } from "./zones/disk.ts";
-import { drawMemoryZone } from "./zones/memory.ts";
-import { drawNetworkZone } from "./zones/network.ts";
-import { drawPowerZone } from "./zones/power.ts";
-import { PROCESS_LIMIT, drawProcessZone } from "./zones/process.ts";
+import { PROCESS_LIMIT_HI, ProcessField } from "./process-field.ts";
+import { drawCpuZone, tableRows as cpuRows } from "./zones/cpu.ts";
+import { drawDiskZone, tableRows as diskRows } from "./zones/disk.ts";
+import { drawMemoryZone, tableRows as memoryRows } from "./zones/memory.ts";
+import { drawNetworkZone, tableRows as networkRows } from "./zones/network.ts";
+import { drawPowerZone, tableRows as powerRows } from "./zones/power.ts";
+import { PROCESS_LIMIT, drawProcessZone, tableRows as processRows } from "./zones/process.ts";
 
 export type Scene = "overworld" | ZoneId;
 
@@ -49,7 +51,10 @@ export class Game {
   // scene, so Network Sky's 60 s graph is complete when you walk in.
   private readonly netHistory = new NetHistory();
   private readonly netSky = new NetSky(this.netHistory, 4, 6, 18);
-  private readonly netSkyHi = new NetSky(this.netHistory, 5, 14, 60);
+  private readonly netSkyHi = new NetSky(this.netHistory, NETWORK_CLOUD_LIMIT_HI, 14, 60);
+  private boring = false;
+  private tablePage = 0;
+  private tablePages = 1;
   private irisStart = -Infinity;
   private irisCenter = { x: 40, y: 23 };
   private now = 0;
@@ -66,6 +71,16 @@ export class Game {
   /** Returns "quit" when the app should exit. */
   key(name: string): "quit" | undefined {
     if (name === "q") return "quit";
+    if (name === "b") {
+      this.boring = !this.boring;
+      this.irisStart = -Infinity;
+      return;
+    }
+    if (this.boring && (name === "pageup" || name === "pagedown")) {
+      const next = this.tablePage + (name === "pageup" ? -1 : 1);
+      this.tablePage = Math.max(0, Math.min(this.tablePages - 1, next));
+      return;
+    }
     if (this.scene === "overworld") {
       const dir: Record<string, [number, number]> = {
         up: [0, -1], k: [0, -1], down: [0, 1], j: [0, 1], left: [-1, 0], h: [-1, 0], right: [1, 0], l: [1, 0],
@@ -100,7 +115,29 @@ export class Game {
     if (scene === this.scene) return;
     if (scene === "overworld") this.irisCenter = { x: this.ow.player.x, y: this.ow.player.y };
     this.scene = scene;
-    this.irisStart = this.now;
+    this.irisStart = this.boring ? -Infinity : this.now;
+    this.tablePage = 0;
+    this.tablePages = 1;
+  }
+
+  private tableRows(snap: Snapshot): Row[] {
+    switch (this.scene) {
+      case "overworld": return overworldRows(snap, this.ow.selected);
+      case "cpu": return cpuRows(snap);
+      case "mem": return memoryRows(snap);
+      case "net": return networkRows(snap, this.netHistory);
+      case "disk": return diskRows(snap);
+      case "proc": return processRows(snap);
+      case "power": return powerRows(snap);
+    }
+  }
+
+  private currentTable(snap: Snapshot): { title: string; rows: Row[]; page: number } {
+    const rows = this.tableRows(snap);
+    this.tablePages = pageCount(rows);
+    this.tablePage = Math.min(this.tablePage, this.tablePages - 1);
+    const title = this.scene === "overworld" ? "OVERWORLD" : ZONES[this.scene].name;
+    return { title, rows, page: this.tablePage };
   }
 
   /** Feed scene-independent history (once per snapshot second; cheap otherwise). */
@@ -119,6 +156,11 @@ export class Game {
     this.tick(t, dt);
     this.record(snap);
     const f = this.frame.reset();
+    if (this.boring) {
+      const { title, rows, page } = this.currentTable(snap);
+      drawTable(f, snap, title, rows, page);
+      return f;
+    }
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
     switch (this.scene) {
       case "overworld": drawOverworld(f, ctx, this.ow); break;
@@ -138,6 +180,11 @@ export class Game {
     this.tick(t, dt);
     this.record(snap);
     const cv = this.canvasHi;
+    if (this.boring) {
+      const { title, rows, page } = this.currentTable(snap);
+      drawTableHi(cv, snap, title, rows, page);
+      return cv;
+    }
     cv.px.fill(0);
     const ctx: DrawCtx = { snap, t, dt, sm: this.sm };
     switch (this.scene) {

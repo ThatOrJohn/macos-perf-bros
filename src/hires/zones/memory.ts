@@ -7,6 +7,7 @@ import { drawText, drawTextCentered, drawTextRight } from "../../engine/font5x7.
 import { P } from "../../engine/palette.ts";
 import { bayer, bevel, bricks, disc, dither, glow, line, outlined } from "../../engine/paint.ts";
 import { fmtBytes, hash, pressureColor, type DrawCtx } from "../../world/common.ts";
+import { appMemoryB, freeMemoryB } from "../../world/zones/memory.ts";
 import { W, X, drawHintHi, drawHudHi, drawMountains, drawNightSky } from "../common.ts";
 
 const GROUND = 124;
@@ -62,7 +63,7 @@ export function drawMemoryZoneHi(cv: PixelCanvas, ctx: DrawCtx): void {
     return;
   }
   const s = (k: string, v: number) => ctx.sm.get(`hi.mem.${k}`, v, ctx.dt);
-  const appB = Math.max(0, m.usedB - m.wiredB - m.compressedB);
+  const appB = appMemoryB(m);
   const t = ctx.t;
   const layers: Layer[] = [
     { label: "WIRED", bytes: s("wired", m.wiredB), color: P.wired,
@@ -185,7 +186,7 @@ export function drawMemoryZoneHi(cv: PixelCanvas, ctx: DrawCtx): void {
 
   // --- left column: gauge + legend
   gauge(cv, 46, 44, m.usedB / m.totalB, m.pressure);
-  const freeB = Math.max(0, m.totalB - m.usedB - m.cachedB);
+  const freeB = freeMemoryB(m);
   const rows: [string, number, Color][] = [
     ...layers.map((L) => [L.label === "COMPRESSED" ? "COMPRESS" : L.label, L.bytes, L.color] as [string, number, Color]),
     ["FREE", freeB, mix(X.outline, P.wired, 0.3)],

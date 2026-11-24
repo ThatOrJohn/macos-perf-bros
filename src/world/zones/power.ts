@@ -7,10 +7,12 @@
  * Critical pressure spills over the rim and blinks the throttling sign.
  * The package display uses green under 10 W, gold under 20 W, red at 20 W and up.
  */
+import type { Snapshot } from "../../core/snapshot.ts";
 import { mix, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { bevel, bricks, disc, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
 import { stamped } from "../../engine/stamp.ts";
+import type { Row } from "../../ui/table.ts";
 import { drawHint, drawHud, drawLockedPanel, thermalColor, type DrawCtx } from "../common.ts";
 import { GENERATORS, drawFoundryFlame, drawThermalLava, drawTurbine, fmtWatts, gpuLabels, packageColor, type PowerPlant } from "../power-plant.ts";
 
@@ -77,4 +79,17 @@ export function drawPowerZone(f: Frame, ctx: DrawCtx, plant: PowerPlant): void {
   }
   if (thermal && thermal !== "unknown") drawThermalLava(cv, 4, 42, 72, 6, plant, thermal === "critical");
   drawHint(f, "esc back  q quit", "PACKAGE W · THERMAL");
+}
+
+export function tableRows(snap: Snapshot): Row[] {
+  const { power, gpu, thermal } = snap;
+  if (!power) return [["POWER", "NEEDS SUDO", P.dim]];
+  const labels = gpuLabels(gpu);
+  return [
+    ["PACKAGE POWER", fmtWatts(power.packageW), packageColor(power.packageW)],
+    ...GENERATORS.map(({ label, key }): Row => [`${label} POWER`, fmtWatts(power[key]), P.hudFg]),
+    ["GPU BUSY", labels.busy, gpu ? P.hudFg : P.dim],
+    ["GPU CLOCK", labels.freq === "CLK N/A" ? "N/A" : labels.freq, gpu?.maxFreqMHz ? P.hudFg : P.dim],
+    ["THERMAL", thermal === "critical" ? "CRITICAL · THROTTLING" : (thermal ?? "N/A").toUpperCase(), thermalColor(thermal)],
+  ];
 }

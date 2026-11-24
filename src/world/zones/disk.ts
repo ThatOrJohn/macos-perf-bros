@@ -6,12 +6,14 @@
  * The top three I/O processes get miners whose combined bytes/s sets pickaxe
  * cadence (0.35–1.8 Hz, same throughput scale). Signs give the raw rates.
  */
+import type { Snapshot } from "../../core/snapshot.ts";
 import { mix, sprite, type Frame, type PixelCanvas } from "../../engine/canvas.ts";
 import { blitOutlined, bricks, line, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
 import { stamped } from "../../engine/stamp.ts";
+import { TABLE_LABEL_WIDTH, type Row } from "../../ui/table.ts";
 import { PLAYER, drawHint, drawHud, drawLockedPanel, fmtRate, type DrawCtx } from "../common.ts";
-import { diskRate, railY, type DiskMines } from "../disk-mines.ts";
+import { diskRate, railY, topDiskProcs, type DiskMines } from "../disk-mines.ts";
 import { processName } from "../process-field.ts";
 
 const LEFT = 5;
@@ -100,4 +102,20 @@ export function drawDiskZone(f: Frame, ctx: DrawCtx, mine: DiskMines): void {
     f.centered(x, 22, fmtRate(diskRate(miner.proc)), P.dim, P.hudBg);
   }
   drawHint(f, "esc back  q quit", "READ ↑  WRITE ↓  LOG SCALE");
+}
+
+export function tableRows(snap: Snapshot): Row[] {
+  const disk = snap.disk;
+  if (!disk) return [["DISK", "NEEDS SUDO", P.dim]];
+  const rows: Row[] = [
+    ["READ BYTES/S", fmtRate(disk.readBps), P.waterHi],
+    ["WRITE BYTES/S", fmtRate(disk.writeBps), P.stoneLight],
+    ["READ OPS/S", String(Math.round(disk.readOps)), P.hudFg],
+    ["WRITE OPS/S", String(Math.round(disk.writeOps)), P.hudFg],
+    ["TOTAL OPS/S", String(Math.round(disk.readOps + disk.writeOps)), P.hudFg],
+  ];
+  const top = topDiskProcs(snap.procs);
+  rows.push(["TOP DISK PROCESSES", top.length ? "TOTAL BYTES/S" : "NONE", top.length ? P.accent : P.dim]);
+  for (const proc of top) rows.push([processName(proc.name, TABLE_LABEL_WIDTH), fmtRate(diskRate(proc)), P.hudFg]);
+  return rows;
 }

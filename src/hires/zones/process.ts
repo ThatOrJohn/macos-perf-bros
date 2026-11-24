@@ -11,10 +11,9 @@ import { drawText, drawTextCentered, drawTextRight } from "../../engine/font5x7.
 import { bevel, glow, outlined } from "../../engine/paint.ts";
 import { P } from "../../engine/palette.ts";
 import { fmtBytes, fmtPct, type DrawCtx } from "../../world/common.ts";
-import { PROCESS_BOSS_CPU, PROCESS_GLOW_ENERGY, blitScaledSlime, drawProcessGrass, processName, slimeHop, type ProcessField, type Slime } from "../../world/process-field.ts";
+import { PROCESS_BOSS_CPU, PROCESS_GLOW_ENERGY, PROCESS_LIMIT_HI, blitScaledSlime, drawProcessGrass, processName, slimeHop, type ProcessField, type Slime } from "../../world/process-field.ts";
 import { BOSS, SLIMES, SLIME_BASES, W, X, drawHintHi, drawHudHi, drawMountains, drawNightSky } from "../common.ts";
 
-export const PROCESS_LIMIT_HI = 12;
 const SHADOW = { shadow: X.outline };
 
 function slimePos(slime: Slime): { cx: number; foot: number } {

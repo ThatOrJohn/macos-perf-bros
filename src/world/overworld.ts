@@ -2,14 +2,16 @@
  * The overworld: every zone as a live tile on one map (DESIGN.md §7.2).
  * Paths are axis-aligned so the player walks straight between nodes.
  */
-import { Frame, mix, sprite, type PixelCanvas } from "../engine/canvas.ts";
+import { Frame, mix, sprite, type Color, type PixelCanvas } from "../engine/canvas.ts";
 import { ditherGradientV, drawDimmed, outlined } from "../engine/paint.ts";
 import type { Snapshot } from "../core/snapshot.ts";
 import { P } from "../engine/palette.ts";
+import type { Row } from "../ui/table.ts";
 import {
   PADLOCK, PLAYER, cpuTotalPct, drawCloud, drawGrass, drawHint, drawHud, drawSmoke, drawStars,
-  fmtBytes, fmtPct, pressureColor, type DrawCtx,
+  fmtBytes, fmtPct, fmtRate, pressureColor, type DrawCtx,
 } from "./common.ts";
+import { fmtWatts, packageColor } from "./power-plant.ts";
 
 const INK = 0x0b0d18;
 
@@ -41,6 +43,20 @@ export function zoneLocked(id: ZoneId | "overworld", snap: Snapshot): boolean {
 }
 
 export const ZONE_ORDER: ZoneId[] = ["cpu", "mem", "net", "disk", "proc", "power"];
+
+export function tableRows(snap: Snapshot, selected: ZoneId): Row[] {
+  const { cpu, memory, net, disk, procs, power } = snap;
+  const usage = cpuTotalPct(snap);
+  const values: Record<ZoneId, [value: string, color: Color]> = {
+    cpu: cpu?.cores.length ? [fmtPct(usage), usage > 85 ? P.crit : usage > 60 ? P.warn : P.hudFg] : ["N/A", P.dim],
+    mem: memory && memory.totalB > 0 ? [fmtPct(memory.usedB / memory.totalB * 100), pressureColor(memory.pressure)] : ["N/A", P.dim],
+    net: net ? [`↓${fmtRate(net.rxBps)} ↑${fmtRate(net.txBps)}`, P.hudFg] : ["NEEDS SUDO", P.dim],
+    disk: disk ? [fmtRate(disk.readBps + disk.writeBps), P.hudFg] : ["NEEDS SUDO", P.dim],
+    proc: [String(procs.length), P.hudFg],
+    power: power ? [fmtWatts(power.packageW), packageColor(power.packageW)] : ["NEEDS SUDO", P.dim],
+  };
+  return ZONE_ORDER.map((id, i) => [`${id === selected ? ">" : " "} ${i + 1} ${ZONES[id].name}`, ...values[id]]);
+}
 
 /** The linked zone in a direction from `from`, if any. */
 export function neighbor(from: ZoneId, dx: number, dy: number): ZoneId | undefined {
