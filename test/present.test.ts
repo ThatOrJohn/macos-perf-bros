@@ -5,7 +5,9 @@ import { loadFixtureReplay } from "../src/core/replay.ts";
 import type { Snapshot } from "../src/core/snapshot.ts";
 import { P } from "../src/engine/palette.ts";
 import { X } from "../src/hires/common.ts";
+import { HELP_KEYS, HELP_METAPHOR } from "../src/ui/help.ts";
 import { PixelView } from "../src/engine/present-opentui.ts";
+import { fmtRate } from "../src/world/common.ts";
 import { Game } from "../src/world/game.ts";
 import { ZONE_ORDER } from "../src/world/overworld.ts";
 
@@ -306,6 +308,80 @@ test("Network Sky table keeps measured history and skips unmeasured seconds", ()
   expect(table).toContain("0 S AGO");
   expect(table).toContain("2 S AGO");
   expect(table).not.toContain("1 S AGO");
+});
+
+test("help shows the controls and each scene's metaphor in art and table views", () => {
+  const loaded = source.at(8);
+  const empty: Snapshot = { t: loaded.t, privileged: false, topology: loaded.topology, procs: [], uptimeS: 0 };
+  for (const [i, scene] of (["overworld", ...ZONE_ORDER] as const).entries()) {
+    for (const table of [false, true]) {
+      const game = new Game();
+      if (i) game.key(String(i));
+      if (table) game.key("b");
+      game.key("?");
+      const snap = table ? empty : loaded;
+      const texts = game.draw(snap, 1, 0).texts.map(({ text }) => text);
+      expect(texts).toContain("HELP");
+      expect(texts).toContain(HELP_METAPHOR[scene]);
+      for (const [key, action] of HELP_KEYS) {
+        expect(texts).toContain(key);
+        expect(texts).toContain(action);
+      }
+      expect(game.drawHi(snap, 1, 0).get(18, 31)).toBe(P.stoneLight);
+      game.key(i === 6 ? "1" : "6");
+      expect(game.scene).toBe(scene);
+      game.key("escape");
+      expect(game.scene).toBe(scene);
+      expect(game.draw(snap, 1, 0).texts.some(({ text }) => text === "HELP")).toBe(false);
+      game.key("?");
+      game.key("?");
+      expect(game.draw(snap, 1, 0).texts.some(({ text }) => text === "HELP")).toBe(false);
+    }
+  }
+});
+
+test("pause preserves the displayed snapshot while animation and navigation continue", () => {
+  const idle = source.at(2);
+  const load = source.at(8);
+  const game = new Game();
+  game.key("6");
+  game.draw(idle, 1, 0);
+  game.key("p");
+  const low = game.draw(load, 1.2, 0.2);
+  expect(low.texts.some(({ row, text }) => row === 0 && text === "PAUSED")).toBe(true);
+  expect(low.texts.some(({ row, text }) => row === 5 && text === `${idle.power!.packageW.toFixed(1)} W`)).toBe(true);
+  const first = game.drawHi(load, 1.2, 0.2).px.slice();
+  const later = game.drawHi(load, 1.4, 0.2).px.slice();
+  expect(later.slice(0, 320 * 11)).toEqual(first.slice(0, 320 * 11));
+  expect(later.slice(320 * 11)).not.toEqual(first.slice(320 * 11));
+
+  game.key("b");
+  expect(game.draw(load, 1.5, 0).texts.some(({ text }) => text === "PAUSED")).toBe(true);
+  game.key("4");
+  expect(game.scene).toBe("disk");
+  const readRate = (snap: Snapshot) => fmtRate(snap.disk!.readBps);
+  const tableValue = (snap: Snapshot) => game.draw(snap, 2, 0).texts.find(({ row, col }) => row === 5 && col > 7)?.text;
+  expect(tableValue(load)).toBe(readRate(idle));
+  game.key("p");
+  expect(tableValue(load)).toBe(readRate(load));
+  expect(game.draw(load, 2, 0).texts.some(({ text }) => text === "PAUSED")).toBe(false);
+});
+
+test("paused Network Sky keeps its chart and resumes with history collected during the pause", () => {
+  const snap = source.at(8);
+  const game = new Game();
+  game.key("3");
+  const before = game.draw(snap, 1, 0).canvas.px.slice(80 * 36, 80 * 44);
+  game.key("p");
+  const sample = (seconds: number): Snapshot => ({ ...snap, t: snap.t + seconds * 1000 });
+  for (let sec = 1; sec <= 61; sec++) game.draw(sample(sec), sec + 1, 0.1);
+  expect(game.draw(sample(62), 63, 0.1).canvas.px.slice(80 * 36, 80 * 44)).toEqual(before);
+  game.key("b");
+  const labels = (seconds: number) => game.draw(sample(seconds), seconds + 1, 0).texts.map(({ text }) => text);
+  expect(labels(62)).toContain("0 S AGO");
+  expect(labels(62)).not.toContain("1 S AGO");
+  game.key("p");
+  expect(labels(63)).toContain("1 S AGO");
 });
 
 test("the Kitty presenter keeps publishing past the image pool's capacity", async () => {

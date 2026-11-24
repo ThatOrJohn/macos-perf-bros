@@ -2,6 +2,9 @@ import { Frame, mix, sprite, type Color, type PixelCanvas } from "../engine/canv
 import { P } from "../engine/palette.ts";
 import type { Smoother } from "../engine/tween.ts";
 import type { Snapshot, ThermalPressure } from "../core/snapshot.ts";
+import { bevel } from "../engine/paint.ts";
+import { HELP_KEYS, HELP_METAPHOR } from "../ui/help.ts";
+import type { Scene } from "./game.ts";
 
 /** Everything a scene needs to draw one frame. */
 export interface DrawCtx {
@@ -71,9 +74,9 @@ export function fitByPriority<T extends { pri: number }>(items: T[], budget: num
 }
 
 /** HUD field importance when the row is full (lower = kept longer). Shared by both renderers. */
-export const HUD_PRI = { cpu: 0, gpu: 1, mem: 2, thermal: 3, power: 4, battery: 5, net: 6, nosudo: 7, uptime: 8, brand: 9 } as const;
+export const HUD_PRI = { paused: -1, cpu: 0, gpu: 1, mem: 2, thermal: 3, power: 4, battery: 5, net: 6, nosudo: 7, uptime: 8, brand: 9 } as const;
 
-export function drawHud(f: Frame, snap: Snapshot): void {
+export function drawHud(f: Frame, snap: Snapshot, paused = false): void {
   f.hudBg = P.hudBg;
   const cpu = cpuTotalPct(snap);
   const mem = snap.memory;
@@ -91,6 +94,7 @@ export function drawHud(f: Frame, snap: Snapshot): void {
   if (snap.thermal) fields.push({ text: snap.thermal.toUpperCase(), color: thermalColor(snap.thermal), pri: HUD_PRI.thermal });
   fields.push({ text: snap.battery ? `♥ ${Math.round(snap.battery.pct)}%` : "AC", color: P.hudFg, pri: HUD_PRI.battery });
   if (!snap.privileged) fields.push({ text: "NO SUDO", color: P.warn, pri: HUD_PRI.nosudo });
+  if (paused) fields.push({ text: "PAUSED", color: P.accent, pri: HUD_PRI.paused, bold: true });
   fields.push({ text: `UP ${fmtUptime(snap.uptimeS)}`, color: P.dim, pri: HUD_PRI.uptime });
 
   // When the row is full the least important fields drop; separators only between drawn fields.
@@ -112,6 +116,31 @@ export function drawHint(f: Frame, left: string, right = ""): void {
   f.canvas.rect(0, 44, 80, 2, P.hudBg);
   f.text(1, 23, left, P.white, P.hudBg);
   if (right) f.text(79 - right.length, 23, right, P.dim, P.hudBg);
+}
+
+/** Centered overlay. Retain the pieces of scene labels outside the panel. */
+export function drawHelpPanel(f: Frame, scene: Scene): void {
+  const left = 12;
+  const right = 68;
+  let kept = 0;
+  for (const run of f.texts.slice()) {
+    const end = run.col + run.text.length;
+    if (run.row < 4 || run.row > 19 || end <= left || run.col >= right) {
+      f.texts[kept++] = run;
+      continue;
+    }
+    if (run.col < left) f.texts[kept++] = { ...run, text: run.text.slice(0, left - run.col) };
+    if (end > right) f.texts[kept++] = { ...run, col: right, text: run.text.slice(right - run.col) };
+  }
+  f.texts.length = kept;
+  bevel(f.canvas, left, 6, right - left, 32, P.hudBg, P.stoneLight, P.ink);
+  f.canvas.hline(left + 1, right - 2, 33, P.stoneDeep);
+  f.centered(40, 5, "HELP", P.accent, P.hudBg, true);
+  for (const [i, [key, action]] of HELP_KEYS.entries()) {
+    f.text(16, i + 7, key, P.accent, P.hudBg);
+    f.text(32, i + 7, action, P.hudFg, P.hudBg);
+  }
+  f.centered(40, 18, HELP_METAPHOR[scene], P.hudFg, P.hudBg);
 }
 
 // ---------------------------------------------------------------- sprites

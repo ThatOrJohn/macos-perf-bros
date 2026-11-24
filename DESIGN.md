@@ -227,8 +227,9 @@ Focusing an entity in a zone (with `Tab` or arrow keys) highlights it and shows 
 | `1`–`6` | Jump straight to a zone |
 | `b` | Toggle boring mode (table view) |
 | `PgUp` / `PgDn` | Move between table pages when available |
-| `p` | Pause sampling (freeze frame) |
-| `?` | Help overlay |
+| `p` | Freeze or resume displayed metrics while sampling and animation continue |
+| `?` | Show or hide the controls and the current scene's metaphor |
+| `r` | Toggle renderer |
 | `q` | Quit |
 
 ## 9. Rendering

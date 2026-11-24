@@ -68,7 +68,8 @@ if (args.help) {
   perf-bros --scale N        fixed pre-scale for kitty/sixel
   perf-bros --sudoers        print a sudoers rule so powermetrics needs no password
 
-Keys: arrows/hjkl move · enter · esc back · 1-6 jump · b table · PgUp/PgDn page · r renderer · q quit`);
+Keys: arrows/hjkl move · enter · esc back · 1-6 jump · b table · PgUp/PgDn page
+      p pause · ? help · r renderer · q quit`);
   process.exit(0);
 }
 
@@ -117,6 +118,9 @@ if (args.png) {
       { name: "9-disk", keys: ["4"], t: 8.5 },
       { name: "table-overworld", keys: ["b"], t: 8.5 },
       ...ZONE_ORDER.map((name, i) => ({ name: `table-${name}`, keys: [String(i + 1), "b"], t: 8.5 })),
+      { name: "help-overworld", keys: ["?"], t: 8.5 },
+      { name: "help-network", keys: ["3", "?"], t: 8.5 },
+      { name: "paused-power", keys: ["6", "p"], t: 8.5 },
     ];
     await renderStills(args.png, await openReplay(args.replay ?? FIXTURE), shots);
   }
@@ -217,7 +221,9 @@ renderer.setFrameCallback(async () => {
 
 renderer.keyInput.on("keypress", (key) => {
   renderer.targetFps = ACTIVE_FPS; // respond at full speed; the frame callback drops it again when idle
-  if (game.key(key.name) === "quit") renderer.destroy();
+  // Legacy terminals send '?' directly; enhanced keyboard modes can report Shift+/.
+  const name = key.sequence === "?" || (key.name === "/" && key.shift) ? "?" : key.name;
+  if (game.key(name) === "quit") renderer.destroy();
   // r: cycle renderer (handy for comparing)
   if (key.name === "r") applyMode(mode === "blocks" ? "kitty" : "blocks");
 });

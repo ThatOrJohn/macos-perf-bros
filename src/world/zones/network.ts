@@ -51,7 +51,7 @@ function drawRadio(cv: PixelCanvas, beacon: boolean): void {
   cv.set(76, 11, beacon ? P.crit : P.ember);
 }
 
-export function drawNetworkZone(f: Frame, ctx: DrawCtx, sky: NetSky, net: NetThroughput | undefined): void {
+export function drawNetworkZone(f: Frame, ctx: DrawCtx, sky: NetSky, history: NetHistory, net: NetThroughput | undefined): void {
   const cv = f.canvas;
   ditherGradientV(cv, 0, 0, 80, 44, SKY);
   drawStars(cv, 31, ctx.t);
@@ -80,7 +80,7 @@ export function drawNetworkZone(f: Frame, ctx: DrawCtx, sky: NetSky, net: NetThr
   bevel(cv, 1, 36, 78, 8, P.hudBg, P.stoneDeep, P.stoneDeep);
   f.text(2, 20, "60S", P.dim, P.hudBg);
   // Band y 36–43 (inner 37–42): rx spans y 38–42, tx 37–41.
-  drawNetHistory(cv, sky.history, Math.floor(ctx.snap.t / 1000), 6, 77, 42, 4);
+  drawNetHistory(cv, history, Math.floor(ctx.snap.t / 1000), 6, 77, 42, 4);
   f.text(77 - rx.length - tx.length - 2, 22, rx, P.ok, P.hudBg);
   f.text(77 - tx.length, 22, tx, P.accent, P.hudBg);
   drawHint(f, "esc back  q quit", "↓ IN  ↑ OUT  LOG SCALE");
