@@ -1,8 +1,17 @@
 # macos-perf-bros
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform: Apple Silicon](https://img.shields.io/badge/platform-Apple%20Silicon-lightgrey)
+
 A terminal system monitor for Apple Silicon Macs, presented as an original NES-style platformer. Walk a little robot around an overworld of zones (CPU Fortress, Memory Reservoir, Network Sky, Disk Mines, Process Plains, Power Plant) and enter one to see that subsystem as a level, where every sprite encodes a live metric.
 
 ![Overworld](docs/stills/2-overworld-load-hires.png)
+
+## Requirements
+
+- An Apple Silicon Mac (Intel, Linux and Windows are not supported).
+- [Bun](https://bun.sh).
+- Optional: `sudo`, so Apple's `powermetrics` can supply GPU, power, thermal, network and disk readings. Everything else works without it.
 
 ## Quick start
 
@@ -43,3 +52,11 @@ If powermetrics exits mid-session, perf-bros keeps running without it and retrie
 - [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md): visual style guide
 - [docs/ROADMAP.md](docs/ROADMAP.md): what's next, as self-contained tasks
 - [fixtures/README.md](fixtures/README.md): data-source quirks
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Security issues: [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 John Walley. Not affiliated with or endorsed by Nintendo or any game publisher; all art is original.
